@@ -47,7 +47,7 @@ Four independent services communicate over HTTP, plus a shared library:
 
 **swisslos_scrape_service** : Scrapes football betting odds from Swisslos by launching a headless Chromium browser via Playwright, intercepting WebSocket frames, and decompressing the binary (zlib-deflate) payloads to extract event and odds data.
 
-**db_service** : FastAPI backend that stores all scraped data in a SQL database (SQLite for dev, PostgreSQL for production). Includes a match-making engine (`match_maker.py`) that uses time-window filtering and fuzzy string matching (rapidfuzz `token_sort_ratio`) to reconcile the same football match across different bookmakers. Exposes endpoints for writing odds, triggering matching, and reading paired cross-bookmaker odds.
+**db_service** : FastAPI backend that stores all scraped data in a SQL database (SQLite for dev, PostgreSQL for production). Links each incoming bookmaker fixture to its canonical match as it is written, so there is no reconciliation step to run afterwards. Exposes endpoints for writing odds and reading paired cross-bookmaker odds.
 
 **dashboard** : Streamlit app that displays matched events with odds from multiple bookmakers side by side, flagging arbitrage opportunities and showing the stake split for each.
 
@@ -63,7 +63,6 @@ Match (canonical event)
     |-- bookmaker        "Loro" / "Swisslos"
     |-- match_label      (may differ slightly between bookmakers)
     |-- match_datetime
-    |-- matching_attempts
     |
     +-- SportsBettingOdds (one per scrape run)
         |-- team1_odds
@@ -76,17 +75,20 @@ An entity diagram is in [`docs/erd.html`](docs/erd.html).
 
 ## Cross-Bookmaker Matching
 
-Loro and Swisslos name teams differently and may report slightly different kick-off times, so a direct join is not possible. The `match_maker` module handles this by:
+Loro and Swisslos disagree about how much of a club's name to write down: Swisslos reports "FC Thun vs Grasshopper Club Zurich" where Loro reports "Thun vs Grasshopper". Rather than score string similarity and pick a threshold, linking is deterministic.
 
-1. Querying all BookmakerMatch rows not yet linked to a canonical Match (with fewer than 3 matching attempts).
-2. For each, searching for existing Match records within a configurable time window (default: +/- 1 hour).
-3. Attempting an exact match on label + datetime first.
-4. Falling back to fuzzy matching using `rapidfuzz.fuzz.token_set_ratio` with a configurable threshold (default: 85).
-5. If no match is found, creating a new canonical Match from the bookmaker data.
+Both feeds distinguish home from away — Loro tags the sides outright, Swisslos implies them by competitor order — and their kick-off times agree, so a fixture is identified by its normalised team pair at a kick-off:
 
-Both scrapers trigger the matching process automatically after posting data via `POST /run_matching/`.
+1. Reduce each team name to the tokens that carry identity — lowercased, de-accented, stripped of club decoration (`FC`, `SC`, `Borussia`, founding years) and mapped through a small exonym table (`Cologne`→`Köln`, `Milano`→`Mailand`).
+2. Compare only fixtures kicking off at the same time.
+3. Two teams are the same when their squad qualifiers are equal (a women's or reserve side is never the senior side) and one's tokens contain the other's.
+4. Both home **and** away must match.
 
-`token_set_ratio` is used rather than `token_sort_ratio` because the bookmakers disagree on how much of a club's name to include — Swisslos reports "FC Thun vs Grasshopper Club Zurich" where Loro reports "Thun vs Grasshopper". Comparing on the shared token set scores those 100; sorting tokens scores 72 and would drop the pair entirely.
+`POST /bookmaker_matches/` resolves this inside the same transaction that stores the row, so a bookmaker match is never persisted in an unresolved state.
+
+**Why the kick-off scope matters.** Token containment is only safe within a kick-off. Across a whole feed it merges genuinely different clubs — "AC Mailand" into "Inter Mailand", "AS Rom" into "Lazio Rom" — because `{mailand} ⊆ {inter, mailand}` is structurally identical to `{grasshopper} ⊆ {grasshopper, zurich}`, and the second must match. A club plays at most once at any given time, which is what makes the rule sound. Measured across 136 kick-off blocks of live data: zero ambiguous pairs.
+
+When two canonical fixtures do both look plausible, the row is left unlinked rather than guessed at — a wrong link is permanent and silently corrupts the odds comparison, whereas an unlinked row is merely absent. Repair is `BettingRepository.merge_matches`, an explicit act; the scrapers re-post every fixture on every run, so a row refused once relinks itself on the next scrape.
 
 ## Arbitrage Detection
 
@@ -143,7 +145,6 @@ swiss-sports-bet/
     |-- db_service/
     |   |-- main.py                 # FastAPI endpoints
     |   |-- repositories.py         # database access
-    |   |-- match_maker.py          # cross-bookmaker fuzzy matching logic
     |   |-- config.py               # DB engine setup from env
     |   |-- migrations/             # Alembic
     |   +-- tests/
@@ -271,7 +272,6 @@ The project is expected to be cloned at `~/projects/sports-bet` on the VPS befor
 | `POST` | `/sports_betting_odds/` | Record a single odds snapshot |
 | `POST` | `/sports_betting_odds/bulk/` | Record several odds snapshots in one transaction |
 | `GET` | `/sports_betting_odds/` | List odds snapshots, newest first (`limit`, `offset`) |
-| `POST` | `/run_matching/` | Trigger cross-bookmaker matching |
 | `GET` | `/matches/with_odds/` | Matches priced by more than one bookmaker (`limit`, `offset`) |
 
 ## Roadmap

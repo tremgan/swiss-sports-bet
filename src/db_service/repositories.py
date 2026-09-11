@@ -5,6 +5,7 @@ bound: the odds table gains a row per match, per bookmaker, per scrape run,
 forever.
 """
 
+import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -13,6 +14,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
+from core.matching import same_team, team_key
 from core.models import (
     BookmakerMatch,
     BookmakerMatchCreate,
@@ -20,6 +22,8 @@ from core.models import (
     SportsBettingOdds,
     SportsBettingOddsCreate,
 )
+
+logger = logging.getLogger("db_service.repositories")
 
 
 class BettingRepository:
@@ -31,10 +35,21 @@ class BettingRepository:
     def __init__(self, session: Session):
         self.session = session
 
+    # Bookmakers occasionally disagree about kick-off by a minute or two. The
+    # window can stay forgiving because an ambiguous block is refused rather
+    # than guessed at.
+    KICKOFF_TOLERANCE_MINUTES = 15
+
     def create_bookmaker_match(self, match: BookmakerMatchCreate) -> BookmakerMatch:
-        """Insert a bookmaker match, returning the existing row if it is a repeat."""
+        """Insert a bookmaker match, linking it to its canonical fixture.
+
+        Linking happens here rather than in a later pass, so a bookmaker match
+        is never persisted in an unresolved state that something else has to
+        remember to clean up.
+        """
         try:
             match_obj = BookmakerMatch.model_validate(match)
+            match_obj.match_id = self._resolve_match(match_obj)
             self.session.add(match_obj)
             self.session.commit()
             self.session.refresh(match_obj)
@@ -52,7 +67,127 @@ class BettingRepository:
                 # The conflict was not the (bookmaker, label, datetime) unique
                 # constraint we expect, so swallowing it would hide a real fault.
                 raise
+            if existing.match_id is None:
+                # The row was persisted unlinked because its block was ambiguous
+                # when it first arrived. Re-posting is the only retry there is
+                # now that the batch pass is gone, so take it: once the
+                # duplicate behind the ambiguity is repaired, the next scrape
+                # run is what makes the fixture visible again.
+                existing.match_id = self._resolve_match(existing)
+                if existing.match_id is not None:
+                    self.session.add(existing)
+                    self.session.commit()
+                    self.session.refresh(existing)
             return existing
+
+    def _resolve_match(self, bookmaker_match: BookmakerMatch) -> int | None:
+        """Find or create the canonical `Match` for a bookmaker's fixture.
+
+        Returns None when more than one canonical fixture is plausible. Refusing
+        to choose is deliberate: a wrong link is permanent and silently corrupts
+        the odds comparison, whereas an unlinked row is visibly absent.
+        """
+        kickoff = bookmaker_match.match_datetime
+
+        # One query, then token containment scoped to the kick-off. That scope
+        # is load-bearing: across a whole feed containment merges distinct clubs
+        # ("AC Mailand" into "Inter Mailand"), but a club plays at most once at
+        # any given time. Blocks are small, so there is nothing to optimise.
+        tolerance = timedelta(minutes=self.KICKOFF_TOLERANCE_MINUTES)
+        nearby = self.session.exec(
+            select(Match)
+            .where(
+                Match.match_datetime >= kickoff - tolerance,
+                Match.match_datetime <= kickoff + tolerance,
+            )
+            .order_by(col(Match.id))
+        ).all()
+        candidates = [
+            m
+            for m in nearby
+            if same_team(bookmaker_match.team1, m.team1)
+            and same_team(bookmaker_match.team2, m.team2)
+        ]
+
+        if len(candidates) > 1:
+            # Two canonical rows both look like this fixture. They may be
+            # fragments of one, or two genuinely different fixtures — and
+            # containment cannot tell those apart, since "Inter Mailand vs AS
+            # Rom" and "AC Mailand vs Lazio Rom" are mutually compatible by
+            # exactly the rule that makes "Grasshopper" match "Grasshopper Club
+            # Zurich". Merging on that evidence would silently fuse two real
+            # fixtures, so refuse and leave the row visibly unlinked.
+            logger.warning(
+                f"ambiguous fixture for {bookmaker_match.match_label!r} at "
+                f"{kickoff}: {[m.match_label for m in candidates]}; "
+                "leaving unlinked"
+            )
+            return None
+
+        if candidates:
+            return candidates[0].id
+
+        # Read the keys into locals: losing the race below expunges `created`,
+        # and the lookup that follows must not depend on a transient object.
+        home_key = team_key(bookmaker_match.team1)
+        away_key = team_key(bookmaker_match.team2)
+        created = Match(
+            match_label=f"{bookmaker_match.team1} vs {bookmaker_match.team2}",
+            match_datetime=kickoff,
+            team1=bookmaker_match.team1,
+            team2=bookmaker_match.team2,
+            home_key=home_key,
+            away_key=away_key,
+        )
+        try:
+            # A savepoint, so losing a race costs only this INSERT: the caller's
+            # transaction stays usable and its bookmaker match still commits,
+            # against whichever row the winner created.
+            with self.session.begin_nested():
+                self.session.add(created)
+                self.session.flush()  # assigns the id we are about to link to
+        except IntegrityError:
+            existing = self.session.exec(
+                select(Match).where(
+                    Match.match_datetime == kickoff,
+                    Match.home_key == home_key,
+                    Match.away_key == away_key,
+                )
+            ).first()
+            if existing is None:
+                # Not the race the unique constraint describes, so swallowing
+                # it would hide a real fault.
+                raise
+            logger.info(
+                f"lost the race to create {created.match_label!r}; "
+                f"linking to match {existing.id}"
+            )
+            return existing.id
+        return created.id
+
+    def merge_matches(self, keep: Match, drop: Match) -> None:
+        """Fold one canonical fixture into another, re-pointing its bookmakers.
+
+        Deliberately not called from the resolver, and not by the migration
+        either: at write time two compatible canonical rows are indistinguishable
+        from two real fixtures, so merging on that evidence would fuse genuine
+        matches. Both refuse and report instead, and this is the deliberate
+        repair they leave to a human — after which re-posting relinks the rows.
+        """
+        logger.info(f"merging {drop.match_label!r} into {keep.match_label!r}")
+        for bm in self.session.exec(
+            select(BookmakerMatch).where(BookmakerMatch.match_id == drop.id)
+        ).all():
+            bm.match_id = keep.id
+            self.session.add(bm)
+
+        # Flush the re-pointing first, then forget the stale collection:
+        # deleting a match otherwise nulls the foreign key of every row
+        # SQLAlchemy still believes belongs to it, undoing the lines above.
+        self.session.flush()
+        self.session.expire(drop, ["bookmaker_matches"])
+        self.session.delete(drop)
+        self.session.flush()
 
     def get_bookmaker_matches(
         self, limit: int | None = None, offset: int = 0

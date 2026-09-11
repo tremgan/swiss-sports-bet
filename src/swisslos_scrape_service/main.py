@@ -144,8 +144,16 @@ def parse_messages(messages: list[dict]) -> list[ScrapedPair]:
             skipped += 1
             continue
 
-        team1 = competitors.get(competitors_refs[0]["competitor"])
-        team2 = competitors.get(competitors_refs[1]["competitor"])
+        # Swisslos does not tag the sides: home is the first competitor by
+        # convention, where Loro states HOME/AWAY outright. The odds below are
+        # role-tagged, so a reversed feed would pin them to the wrong name.
+        try:
+            team1 = competitors.get(competitors_refs[0]["competitor"])
+            team2 = competitors.get(competitors_refs[1]["competitor"])
+        except (KeyError, TypeError):
+            logger.warning(f"malformed competitors for event {event.get('urn')!r}")
+            skipped += 1
+            continue
         if not team1 or not team2:
             logger.warning(f"missing competitor name for event {event.get('urn')!r}")
             skipped += 1
@@ -189,6 +197,8 @@ def parse_messages(messages: list[dict]) -> list[ScrapedPair]:
                         bookmaker=BOOKMAKER,
                         match_label=match_label,
                         match_datetime=match_datetime,
+                        team1=team1,
+                        team2=team2,
                     ),
                     SportsBettingOddsCreate(
                         team1_odds=odds_by_type["home"],

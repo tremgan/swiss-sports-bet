@@ -7,7 +7,7 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from core.models import BookmakerMatchCreate, SportsBettingOddsCreate
-from core.scraper import build_session, publish, trigger_matching
+from core.scraper import build_session, publish
 
 DB_URL = "http://db-service.test"
 logger = logging.getLogger("test")
@@ -45,6 +45,8 @@ def make_pair(label: str = "A vs B"):
             bookmaker="Loro",
             match_label=label,
             match_datetime=datetime(2026, 3, 25, 18, 0),
+            team1=label.split(" vs ")[0],
+            team2=label.split(" vs ")[1],
         ),
         SportsBettingOddsCreate(team1_odds=2.1, draw_odds=3.6, team2_odds=4.0),
     )
@@ -96,15 +98,6 @@ def test_publish_survives_a_network_error_and_continues():
     posted, failed = publish(pairs, DB_URL, session, logger)
 
     assert (posted, failed) == (1, 1)
-
-
-def test_trigger_matching_reports_failure_instead_of_claiming_success():
-    assert trigger_matching(DB_URL, FakeSession([FakeResponse(200)]), logger) is True
-    assert trigger_matching(DB_URL, FakeSession([FakeResponse(500)]), logger) is False
-    assert (
-        trigger_matching(DB_URL, FakeSession([requests.ConnectionError()]), logger)
-        is False
-    )
 
 
 def test_build_session_applies_a_default_timeout_and_user_agent():

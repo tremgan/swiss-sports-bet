@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlmodel import Session
 
+from core.matching import team_key
 from core.models import BookmakerMatch, Match, SportsBettingOdds
 from repositories import BettingRepository
 
@@ -26,7 +27,14 @@ def seed_match(
 ) -> Match:
     """Create a canonical match with the given odds history per bookmaker."""
     team1, team2 = label.split(" vs ")
-    match = Match(match_label=label, match_datetime=kickoff, team1=team1, team2=team2)
+    match = Match(
+        match_label=label,
+        match_datetime=kickoff,
+        team1=team1,
+        team2=team2,
+        home_key=team_key(team1),
+        away_key=team_key(team2),
+    )
     session.add(match)
     session.flush()
 
@@ -35,6 +43,8 @@ def seed_match(
             bookmaker=bookmaker,
             match_label=label,
             match_datetime=kickoff,
+            team1=team1,
+            team2=team2,
             match_id=match.id,
         )
         session.add(bookmaker_match)

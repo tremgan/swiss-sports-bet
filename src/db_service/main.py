@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
-import match_maker
 from config import engine, logger
 from core.models import (
     BookmakerMatch,
@@ -99,13 +98,6 @@ def read_sports_betting_odds(
 ) -> Sequence[SportsBettingOdds]:
     """List odds snapshots, newest first."""
     return repo.get_odds(limit=limit, offset=offset)
-
-
-@app.post("/run_matching/")
-def trigger_matching(repo: Repo) -> dict[str, str]:
-    """Reconcile unlinked bookmaker matches against canonical matches."""
-    match_maker.run(repo.session)
-    return {"status": "matching complete"}
 
 
 @app.get("/matches/with_odds/", response_model=None)

@@ -17,6 +17,8 @@ def test_root(client: TestClient):
 MATCH_DATA = {
     "bookmaker": "TestBookmaker",
     "match_label": "Team A vs Team B",
+    "team1": "Team A",
+    "team2": "Team B",
     "match_datetime": "2024-01-01T12:00:00",
 }
 

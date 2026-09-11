@@ -157,6 +157,8 @@ def _parse_event(event: dict[str, Any]) -> ScrapedPair | None:
                 bookmaker=BOOKMAKER,
                 match_label=match_label,
                 match_datetime=match_datetime,
+                team1=teams["HOME"],
+                team2=teams["AWAY"],
             ),
             SportsBettingOddsCreate(
                 team1_odds=prices[HOME],

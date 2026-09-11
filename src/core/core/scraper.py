@@ -1,9 +1,9 @@
 """Shared runtime for the bookmaker scrapers.
 
 Every scraper does the same thing once it has parsed its source: POST each
-match, attach the returned id to its odds, POST those, then ask the db_service
-to reconcile. Only the parsing differs, so a scraper here is just a callable
-returning `(match, odds)` pairs.
+match and then its odds. The db_service links a fixture to its canonical match
+as it is written, so there is nothing to reconcile afterwards. Only the parsing
+differs, so a scraper here is just a callable returning `(match, odds)` pairs.
 
 Returning *pairs* rather than two parallel lists is deliberate: the previous
 per-service copies of this loop kept `matches` and `odds` aligned by hand and
@@ -133,26 +133,6 @@ def publish(
     return posted, failed
 
 
-def trigger_matching(
-    db_service_url: str,
-    session: requests.Session,
-    logger: logging.Logger,
-) -> bool:
-    """Ask the db_service to reconcile bookmaker matches. True if it succeeded."""
-    try:
-        response = session.post(f"{db_service_url}/run_matching/")
-    except requests.RequestException as exc:
-        logger.error(f"could not trigger match-making: {exc}")
-        return False
-
-    if response.status_code != 200:
-        logger.error(f"match-making failed: HTTP {response.status_code}")
-        return False
-
-    logger.info("match-making complete")
-    return True
-
-
 def run_once(
     bookmaker: str,
     scrape_fn: ScrapeFn,
@@ -171,9 +151,6 @@ def run_once(
 
         posted, failed = publish(pairs, db_service_url, session, logger)
         logger.info(f"posted {posted} matches, {failed} failures")
-
-        if posted:
-            trigger_matching(db_service_url, session, logger)
     except Exception:
         # The daemon has to survive a bad run; the next cycle starts clean.
         logger.exception(f"unhandled error during {bookmaker} scrape")

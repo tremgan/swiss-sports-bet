@@ -28,9 +28,18 @@ class MatchBase(SQLModel):
 
 
 class Match(MatchBase, table=True):
-    __table_args__ = (UniqueConstraint("match_label", "match_datetime"),)
+    # Identity is the normalised team pair at a kick-off, not a bookmaker's
+    # label, so the same fixture resolves to one row whoever scrapes it first.
+    # The constraint catches two scrapers racing to create the same identity at
+    # the same instant; a race over kick-offs minutes apart yields different
+    # tuples, so the resolver's kick-off window is what handles that, and what
+    # it leaves behind is a fragment for deliberate repair.
+    __table_args__ = (UniqueConstraint("match_datetime", "home_key", "away_key"),)
 
     id: int | None = Field(default=None, primary_key=True)
+
+    home_key: str
+    away_key: str
 
     bookmaker_matches: list["BookmakerMatch"] = Relationship(back_populates="match")
 
@@ -49,6 +58,11 @@ class BookmakerMatchBase(SQLModel):
     bookmaker: str
     match_label: str
     match_datetime: datetime
+    # Keeping the sides apart is what lets a fixture be matched side-by-side
+    # instead of by fuzzing one string. Loro tags them explicitly; Swisslos
+    # only implies them by competitor order — see its parser for what that costs.
+    team1: str
+    team2: str
 
 
 class BookmakerMatch(BookmakerMatchBase, table=True):
@@ -57,7 +71,6 @@ class BookmakerMatch(BookmakerMatchBase, table=True):
     __table_args__ = (UniqueConstraint("bookmaker", "match_label", "match_datetime"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    matching_attempts: int = Field(default=0, index=True)
 
     sports_betting_odds: list["SportsBettingOdds"] = Relationship(
         back_populates="bookmaker_match"
