@@ -1,30 +1,35 @@
-import os
-from pydantic import ValidationError
-from playwright.sync_api import sync_playwright
-from datetime import datetime, timezone
-from pathlib import Path
-import logging
-from rich.logging import RichHandler
+"""Scrapes football odds from Swisslos.
+
+Swisslos has no public odds API: the page opens a WebSocket and streams
+zlib-deflated JSON frames. So the scraper drives a headless Chromium, taps the
+frames as they arrive, inflates them, and rebuilds the entity graph
+(Competitor / Selection / Market / Event) they describe.
+"""
+
 import json
-import zlib
 import time
-import requests
-from config import DB_SERVICE_URL
+import zlib
+from datetime import UTC, datetime
 
+from playwright.sync_api import sync_playwright
+from pydantic import ValidationError
+
+from core.logging_config import setup_logging
 from core.models import BookmakerMatchCreate, SportsBettingOddsCreate
+from core.scraper import USER_AGENT, ScrapedPair, build_session, run_forever
 
-log_path = Path(__file__).parent / "scrapers.log"
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s:%(name)s:%(levelname)s:%(message)s",
-    handlers=[
-        logging.FileHandler(log_path),
-        RichHandler(rich_tracebacks=True, show_path=False),
-    ],
-)
-logger = logging.getLogger(Path(__file__).name)
+logger = setup_logging("swisslos_scraper")
 
 BOOKMAKER = "Swisslos"
+SWISSLOS_URL = "https://www.swisslos.ch/de/sporttip/sportwetten/fussball"
+
+# The page streams its book progressively, so the frames are collected for a
+# fixed window rather than waiting on any one signal.
+FRAME_COLLECTION_SECONDS = 60
+PAGE_LOAD_TIMEOUT_MS = 180_000
+
+# Swisslos' internal URNs for the 1X2 market and its three outcomes.
+MARKET_TYPE_1X2 = "asw:markettype:1"
 SELECTION_TYPE_MAP = {
     "asw:selectiontype:1": "home",
     "asw:selectiontype:2": "draw",
@@ -33,21 +38,23 @@ SELECTION_TYPE_MAP = {
 
 
 def decode_binary_payload(payload: bytes) -> dict | None:
+    """Inflate one raw WebSocket frame. Frames are raw deflate, hence wbits=-15."""
     try:
         decompressed = zlib.decompress(payload, wbits=-15)
         return json.loads(decompressed.decode("utf-8"))
-    except Exception as e:
-        logger.warning(f"failed to decode payload: {e}")
+    except Exception as exc:
+        logger.warning(f"failed to decode payload: {exc}")
         return None
 
 
 def collect_messages() -> list[dict]:
-    messages = []
+    """Drive the page and return every WebSocket frame decoded during the window."""
+    messages: list[dict] = []
     logger.info("launching headless browser...")
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context()
+        context = browser.new_context(user_agent=USER_AGENT)
         page = context.new_page()
 
         def on_websocket(ws):
@@ -64,12 +71,14 @@ def collect_messages() -> list[dict]:
         page.on("websocket", on_websocket)
         logger.info("navigating to Swisslos football page...")
         page.goto(
-            "https://www.swisslos.ch/de/sporttip/sportwetten/fussball",
-            timeout=180_000,
+            SWISSLOS_URL,
+            timeout=PAGE_LOAD_TIMEOUT_MS,
             wait_until="domcontentloaded",
         )
-        logger.info("page loaded, collecting websocket frames for 60s...")
-        time.sleep(60)
+        logger.info(
+            f"page loaded, collecting frames for {FRAME_COLLECTION_SECONDS}s..."
+        )
+        time.sleep(FRAME_COLLECTION_SECONDS)
         page.close()
         browser.close()
 
@@ -77,20 +86,20 @@ def collect_messages() -> list[dict]:
     return messages
 
 
-def parse_messages(
-    messages: list[dict],
-) -> tuple[list[BookmakerMatchCreate], list[SportsBettingOddsCreate]]:
-    competitors = {}
-    selections = {}
-    markets = {}
-    events = []
+def parse_messages(messages: list[dict]) -> list[ScrapedPair]:
+    """Rebuild the entity graph from the frames and emit (match, odds) pairs."""
+    competitors: dict[str, str] = {}
+    selections: dict[str, dict] = {}
+    markets: dict[str, dict] = {}
+    events: list[dict] = []
 
     for msg in messages:
         payload = msg.get("payload", [])
         if isinstance(payload, str):
             try:
                 payload = json.loads(payload)
-            except Exception:
+            except json.JSONDecodeError as exc:
+                logger.warning(f"skipping frame with unparseable payload: {exc}")
                 continue
 
         for item in payload:
@@ -103,31 +112,30 @@ def parse_messages(
             for e in entities:
                 if not isinstance(e, dict):
                     continue
-                t = e.get("type")
+                entity_type = e.get("type")
                 entity = e.get("entity", {})
                 urn = entity.get("urn")
 
-                if t == "Competitor":
+                if entity_type == "Competitor":
                     competitors[urn] = entity.get("name")
-                elif t == "Selection":
+                elif entity_type == "Selection":
                     selections[urn] = {
                         "type": entity.get("type"),
                         "odds": entity.get("odds"),
                     }
-                elif t == "Market":
+                elif entity_type == "Market":
                     markets[urn] = {
                         "type": entity.get("type"),
                         "selections": entity.get("selections", []),
                     }
-                elif t == "Event":
+                elif entity_type == "Event":
                     events.append(entity)
 
     logger.info(
         f"{len(competitors)=} {len(selections)=} {len(markets)=} {len(events)=}"
     )
 
-    matches = []
-    odds_list = []
+    pairs: list[ScrapedPair] = []
     skipped = 0
 
     for event in events:
@@ -147,12 +155,12 @@ def parse_messages(
         match_datetime = datetime.fromisoformat(
             event["startTime"].replace("Z", "+00:00")
         )
-        match_datetime = match_datetime.astimezone(timezone.utc).replace(tzinfo=None)
+        match_datetime = match_datetime.astimezone(UTC).replace(tzinfo=None)
 
         market_1x2 = None
         for market_urn in event.get("markets", []):
             market = markets.get(market_urn)
-            if market and market["type"] == "asw:markettype:1":
+            if market and market["type"] == MARKET_TYPE_1X2:
                 market_1x2 = market
                 break
 
@@ -174,81 +182,33 @@ def parse_messages(
             skipped += 1
             continue
 
-     
-
         try:
-            matches.append(
-                BookmakerMatchCreate(
-                    bookmaker=BOOKMAKER,
-                    match_label=match_label,
-                    match_datetime=match_datetime,
+            pairs.append(
+                (
+                    BookmakerMatchCreate(
+                        bookmaker=BOOKMAKER,
+                        match_label=match_label,
+                        match_datetime=match_datetime,
+                    ),
+                    SportsBettingOddsCreate(
+                        team1_odds=odds_by_type["home"],
+                        team2_odds=odds_by_type["away"],
+                        draw_odds=odds_by_type.get("draw"),
+                    ),
                 )
             )
-            odds_list.append(
-                SportsBettingOddsCreate(
-                    team1_odds=odds_by_type["home"],
-                    team2_odds=odds_by_type["away"],
-                    draw_odds=odds_by_type.get("draw"),
-                )
-            )
-        except ValidationError as e:
-            logger.warning(f"invalid odds for {match_label!r}, skipping: {e}")
-            matches.pop()  # remove the match we just appended
+        except ValidationError as exc:
+            logger.warning(f"invalid odds for {match_label!r}, skipping: {exc}")
             skipped += 1
             continue
 
-    logger.info(f"parsed {len(matches)} matches, skipped {skipped}")
-    return matches, odds_list
+    logger.info(f"parsed {len(pairs)} matches, skipped {skipped}")
+    return pairs
 
 
-def main():
-    logger.info("=== Swisslos scrape run starting ===")
-    try:
-        t0 = time.perf_counter()
-        messages = collect_messages()
-        matches, odds_list = parse_messages(messages)
-        t1 = time.perf_counter()
-        logger.info(f"scraped {len(matches)} matches in {t1 - t0:.2f}s")
-
-        posted, failed = 0, 0
-        for match, odds in zip(matches, odds_list):
-            match_response = requests.post(
-                f"{DB_SERVICE_URL}/bookmaker_matches/",
-                json=match.model_dump(mode="json"),
-            )
-            if match_response.status_code != 200:
-                logger.error(f"failed to post match {match.match_label!r}: {match_response.text}")
-                failed += 1
-                continue
-
-            odds.bookmaker_match_id = match_response.json().get("id")
-            odds_response = requests.post(
-                f"{DB_SERVICE_URL}/sports_betting_odds/",
-                json=odds.model_dump(mode="json"),
-            )
-            if odds_response.status_code != 200:
-                logger.error(f"failed to post odds for {match.match_label!r}: {odds_response.text}")
-                failed += 1
-            else:
-                posted += 1
-
-        logger.info(f"posted {posted} matches, {failed} failures")
-
-        logger.info("triggering match-making...")
-        requests.post(f"{DB_SERVICE_URL}/run_matching/")
-        logger.info("match-making triggered")
-
-    except Exception:
-        logger.exception("unhandled scrape error")
-
-    logger.info("=== Swisslos scrape run complete ===")
+def scrape() -> list[ScrapedPair]:
+    return parse_messages(collect_messages())
 
 
 if __name__ == "__main__":
-    SCRAPE_FREQUENCY_HOURS = int(os.getenv("SCRAPE_FREQUENCY_HOURS", 3))
-    logger.info(f"starting Swisslos scraper, frequency: {SCRAPE_FREQUENCY_HOURS}h")
-
-    while True:
-        main()
-        logger.info(f"sleeping {SCRAPE_FREQUENCY_HOURS}h until next run")
-        time.sleep(SCRAPE_FREQUENCY_HOURS * 60 * 60)
+    run_forever(BOOKMAKER, scrape, session=build_session(), logger=logger)

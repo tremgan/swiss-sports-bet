@@ -1,6 +1,3 @@
-
-version: '3.8'
-
 services:
 
   postgres:
@@ -12,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data    
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
@@ -28,17 +25,17 @@ services:
     expose:
       - "8000"
     environment:
-      - SQLMODEL_DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - SQLMODEL_DB_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       postgres:
         condition: service_healthy
-          
+
   loro_scrape_service:
       build:
         context: .
         dockerfile: src/loro_scrape_service/Dockerfile
       container_name: loro-scrape-service
-      environment: 
+      environment:
         - DB_SERVICE_URL=http://db_service:8000
         - SCRAPE_FREQUENCY_HOURS=${SCRAPE_FREQUENCY_HOURS}
       depends_on:
@@ -51,7 +48,7 @@ services:
       context: .
       dockerfile: src/swisslos_scrape_service/Dockerfile
     container_name: swisslos-scrape-service
-    environment: 
+    environment:
       - DB_SERVICE_URL=http://db_service:8000
       - SCRAPE_FREQUENCY_HOURS=${SCRAPE_FREQUENCY_HOURS}
     depends_on:
@@ -75,6 +72,6 @@ services:
     restart: unless-stopped
 
 
-      
-volumes:                    
+
+volumes:
   postgres_data:

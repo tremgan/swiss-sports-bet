@@ -5,7 +5,7 @@ WORKDIR /app/swisslos_scrape_service
 COPY src/core /app/core
 COPY src/swisslos_scrape_service/pyproject.toml .
 COPY src/swisslos_scrape_service/uv.lock .
-RUN uv sync --no-editable --frozen
+RUN uv sync --no-editable --frozen --no-dev
 
 RUN uv run playwright install chromium --with-deps
 

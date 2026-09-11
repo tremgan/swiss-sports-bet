@@ -5,7 +5,7 @@ WORKDIR /app/dashboard
 COPY src/core /app/core
 COPY src/dashboard/pyproject.toml .
 COPY src/dashboard/uv.lock .
-RUN uv sync --no-editable --frozen
+RUN uv sync --no-editable --frozen --no-dev
 
 COPY src/dashboard .
 

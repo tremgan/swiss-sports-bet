@@ -1,33 +1,48 @@
-from sqlmodel import Session, select
-from typing import Optional
+"""Reconciles incoming bookmaker matches against canonical `Match` rows.
+
+Loro and Swisslos name teams differently and report slightly different kick-off
+times, so a direct join is impossible. Each unlinked `BookmakerMatch` is
+resolved against candidates inside a time window, first by exact label match and
+then by fuzzy ratio, and a new canonical `Match` is created when nothing fits.
+"""
+
+import logging
+from collections.abc import Sequence
 from datetime import timedelta
+
 from rapidfuzz import fuzz
+from sqlmodel import Session, col, select
 
 from core.models import BookmakerMatch, Match
-from logger import logger
 
-"""
-This module is responsible for matching incoming bookmaker matches with existing matches in the database, 
-or creating new matches if no good match is found. It uses a combination of exact matching and fuzzy string matching to find the best match for each incoming bookmaker match. 
-The matching process is designed to be robust to minor differences in match labels and to allow for some flexibility in match datetimes.
-"""
+logger = logging.getLogger("db_service.match_maker")
 
 
 TIME_DELTA_FOR_MATCHING = timedelta(hours=1)
-TOKEN_SORT_RATIO_THRESHOLD = 75
+
+# token_set_ratio rather than token_sort_ratio because bookmakers disagree on
+# how much of a club's name to include: Swisslos says "FC Thun vs Grasshopper
+# Club Zurich" where Loro says "Thun vs Grasshopper". Comparing on the shared
+# token set scores those 100, where token_sort_ratio scores 72 and drops them.
+# The threshold is high because genuine matches score at or near 100, while a
+# fixture that merely shares one team peaks around 79.
+TOKEN_SET_RATIO_THRESHOLD = 85
+# Give up on a bookmaker match after this many failed reconciliation passes.
+MAX_MATCHING_ATTEMPTS = 3
 
 
-def find_match(bookmaker_match: BookmakerMatch, session: Session) -> Optional[Match]:
-    """Find the best matching Match for a given BookmakerMatch, or return None if no good match is found."""
+def find_match(bookmaker_match: BookmakerMatch, session: Session) -> Match | None:
+    """Find the best `Match` for a `BookmakerMatch`, or None if none is close enough."""
 
     logger.info(
-        f"Starting match search for bookmaker match: {bookmaker_match.match_label} at {bookmaker_match.match_datetime}"
+        f"Starting match search for bookmaker match: "
+        f"{bookmaker_match.match_label} at {bookmaker_match.match_datetime}"
     )
 
     time_window_start = bookmaker_match.match_datetime - TIME_DELTA_FOR_MATCHING
     time_window_end = bookmaker_match.match_datetime + TIME_DELTA_FOR_MATCHING
 
-    candidates: list[Match] = session.exec(
+    candidates: Sequence[Match] = session.exec(
         select(Match).where(
             Match.match_datetime >= time_window_start,
             Match.match_datetime <= time_window_end,
@@ -49,8 +64,8 @@ def find_match(bookmaker_match: BookmakerMatch, session: Session) -> Optional[Ma
         ),
         None,
     )
-    # note that there could be multiple exact matches,
-    # however Matches have a unique constraint on (match_label, match_datetime) so there should be at most one exact match in the database
+    # There could in principle be several exact matches, but Match has a unique
+    # constraint on (match_label, match_datetime), so there is at most one.
     if exact:
         logger.info(f"Found exact match: {exact.match_label} at {exact.match_datetime}")
         return exact
@@ -59,9 +74,9 @@ def find_match(bookmaker_match: BookmakerMatch, session: Session) -> Optional[Ma
     logger.info("No exact match found, performing fuzzy matching")
     best_candidate = max(
         candidates,
-        key=lambda c: fuzz.token_sort_ratio(c.match_label, bookmaker_match.match_label),
+        key=lambda c: fuzz.token_set_ratio(c.match_label, bookmaker_match.match_label),
     )
-    best_score = fuzz.token_sort_ratio(
+    best_score = fuzz.token_set_ratio(
         best_candidate.match_label, bookmaker_match.match_label
     )
 
@@ -69,10 +84,11 @@ def find_match(bookmaker_match: BookmakerMatch, session: Session) -> Optional[Ma
         f"Best fuzzy match: '{best_candidate.match_label}' with score {best_score}"
     )
 
-    # If the best score is above the threshold, return the best candidate, otherwise return None
-    if best_score <= TOKEN_SORT_RATIO_THRESHOLD:
+    # Above the threshold the best candidate wins; below it, nothing matches.
+    if best_score <= TOKEN_SET_RATIO_THRESHOLD:
         logger.warning(
-            f"Best match score {best_score} is below threshold {TOKEN_SORT_RATIO_THRESHOLD}, no match found"
+            f"Best match score {best_score} is below threshold "
+            f"{TOKEN_SET_RATIO_THRESHOLD}, no match found"
         )
         return None
 
@@ -89,10 +105,12 @@ def create_match_from_bookmaker_match(bookmaker_match: BookmakerMatch) -> Match:
     )
 
 
-def run(session: Session):
+def run(session: Session) -> None:
+    """Link every unresolved bookmaker match to a canonical match."""
     bookmaker_matches = session.exec(
         select(BookmakerMatch).where(
-            BookmakerMatch.match_id == None, BookmakerMatch.matching_attempts < 3
+            col(BookmakerMatch.match_id).is_(None),
+            BookmakerMatch.matching_attempts < MAX_MATCHING_ATTEMPTS,
         )
     ).all()
     for bookmaker_match in bookmaker_matches:

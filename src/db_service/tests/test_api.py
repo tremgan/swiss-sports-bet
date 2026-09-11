@@ -1,37 +1,7 @@
-import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine, select
-from sqlalchemy.pool import StaticPool
-from main import app, get_session
+from sqlmodel import Session, select
+
 from core.models import BookmakerMatch, SportsBettingOdds
-
-DATABASE_URL = "sqlite:///:memory:"
-
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-
-
-@pytest.fixture(name="session")
-def session_fixture():
-    SQLModel.metadata.drop_all(engine)  # avoid leaking state between tests
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-
-
-@pytest.fixture(name="client")
-def client_fixture(session: Session):
-    def get_test_session():
-        yield session
-
-    app.dependency_overrides[get_session] = get_test_session
-    with TestClient(app) as client:
-        yield client
-    app.dependency_overrides.clear()
-
 
 # ── root ──────────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,3 @@
-# test.yaml — no changes needed to triggers
-
-# deploy.yaml
 name: Deploy
 
 on:

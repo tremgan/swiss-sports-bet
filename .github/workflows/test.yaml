@@ -14,6 +14,22 @@ on:
   workflow_call: # allows this workflow to be called from deploy
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # ruff resolves no imports, so one pass from the root covers every service.
+      - name: Ruff check
+        run: uv tool run ruff check .
+
+      - name: Ruff format
+        run: uv tool run ruff format --check .
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -41,15 +57,17 @@ jobs:
             echo "has_tests=false" >> $GITHUB_OUTPUT
           fi
 
-      
       - name: Install dependencies
         working-directory: src/${{ matrix.service }}
         run: uv sync
 
+      # pyright runs per service because it needs that service's own venv to
+      # resolve sqlmodel, fastapi and streamlit.
+      - name: Type check
+        working-directory: src/${{ matrix.service }}
+        run: uv run pyright
 
       - name: Run tests
         if: steps.check_tests.outputs.has_tests == 'true'
         working-directory: src/${{ matrix.service }}
         run: uv run pytest
-
-  

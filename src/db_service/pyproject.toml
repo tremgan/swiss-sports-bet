@@ -1,17 +1,13 @@
 [project]
 name = "db-service"
 version = "0.1.0"
-description = "This project exposes an api to read and write for an external database"
-readme = "README.md"
+description = "FastAPI service storing scraped bookmaker odds and reconciling events across bookmakers."
 requires-python = ">=3.13"
 dependencies = [
-    "apscheduler>=3.11.2",
+    "alembic>=1.16.5",
     "core",
     "fastapi>=0.135.1",
-    "httpx>=0.28.1",
-    "psycopg2-binary>=2.9.11",
     "psycopg[binary]>=3.1.0",
-    "pytest>=9.0.2",
     "python-dotenv>=1.2.2",
     "rapidfuzz>=3.14.3",
     "rich>=14.3.3",
@@ -19,15 +15,30 @@ dependencies = [
     "uvicorn>=0.42.0",
 ]
 
-[tool.setuptools.packages.find]
-where = ["."]
+[dependency-groups]
+dev = [
+    # fastapi.testclient is a thin wrapper over httpx and imports it at runtime.
+    "httpx>=0.28.1",
+    "pyright>=1.1.406",
+    "pytest>=9.0.2",
+]
+
+# Flat application, not an importable distribution: modules are resolved via
+# pythonpath, so there is nothing for uv to build.
+[tool.uv]
+package = false
 
 [tool.uv.sources]
 core = { path = "../core", editable = true }
 
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
-
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.pyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.13"
+include = ["."]
+# `core` is installed editable; pyright cannot follow setuptools' editable
+# finder, so it reads the source tree directly.
+extraPaths = ["../core"]
+exclude = ["**/__pycache__", ".venv", "migrations/versions"]

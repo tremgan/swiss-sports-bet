@@ -1,0 +1,239 @@
+{
+  "data": {
+    "events": [
+      {
+        "id": "74820",
+        "name": "St. Gallen v Sion",
+        "startTime": "2026-09-12T16:00:00Z",
+        "teams": [
+          {
+            "side": "HOME",
+            "name": "St. Gallen"
+          },
+          {
+            "side": "AWAY",
+            "name": "Sion"
+          }
+        ],
+        "markets": [
+          {
+            "id": "3198635",
+            "name": "1X2",
+            "groupCode": "MATCH_RESULT",
+            "outcomes": [
+              {
+                "name": "St. Gallen",
+                "type": "MR",
+                "subType": "H",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 2.05
+                  }
+                ]
+              },
+              {
+                "name": "Sion",
+                "type": "MR",
+                "subType": "A",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 2.8
+                  }
+                ]
+              },
+              {
+                "name": "X",
+                "type": "MR",
+                "subType": "D",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 3.75
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "two-way",
+        "name": "Khor Fakkan Club v FC Baniyas",
+        "startTime": "2026-09-11T13:40:00Z",
+        "teams": [
+          {
+            "side": "HOME",
+            "name": "Khor Fakkan Club"
+          },
+          {
+            "side": "AWAY",
+            "name": "FC Baniyas"
+          }
+        ],
+        "markets": [
+          {
+            "id": "3166944",
+            "name": "1X2",
+            "groupCode": "MATCH_RESULT",
+            "outcomes": [
+              {
+                "name": "FC Baniyas",
+                "type": "MR",
+                "subType": "A",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 2.05
+                  }
+                ]
+              },
+              {
+                "name": "Khor Fakkan Club",
+                "type": "MR",
+                "subType": "H",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 1.85
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "no-teams",
+        "name": "Al-Gharafa SC v Lusail City",
+        "startTime": "2026-09-11T14:00:00Z",
+        "teams": [],
+        "markets": [
+          {
+            "id": "3260387",
+            "name": "1X2",
+            "groupCode": "MATCH_RESULT",
+            "outcomes": [
+              {
+                "name": "X",
+                "type": "MR",
+                "subType": "D",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 3.65
+                  }
+                ]
+              },
+              {
+                "name": "Al-Gharafa SC",
+                "type": "MR",
+                "subType": "H",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 1.73
+                  }
+                ]
+              },
+              {
+                "name": "Lusail City",
+                "type": "MR",
+                "subType": "A",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 3.25
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "no-1x2",
+        "name": "Farul Constanta v FC Uta Arad",
+        "startTime": "2026-09-11T15:00:00Z",
+        "teams": [
+          {
+            "side": "HOME",
+            "name": "Farul Constanta"
+          },
+          {
+            "side": "AWAY",
+            "name": "FC Uta Arad"
+          }
+        ],
+        "markets": [
+          {
+            "id": "9999",
+            "name": "Total Goals",
+            "groupCode": "TOTAL_GOALS_OVER/UNDER",
+            "outcomes": []
+          }
+        ]
+      },
+      {
+        "id": "suspended",
+        "name": "Al Qadsiah v Al Ettifaq",
+        "startTime": "2026-09-11T15:25:00Z",
+        "teams": [
+          {
+            "side": "HOME",
+            "name": "Al Qadsiah"
+          },
+          {
+            "side": "AWAY",
+            "name": "Al Ettifaq"
+          }
+        ],
+        "markets": [
+          {
+            "id": "3147144",
+            "name": "1X2",
+            "groupCode": "MATCH_RESULT",
+            "outcomes": [
+              {
+                "name": "Al Qadsiah",
+                "type": "MR",
+                "subType": "H",
+                "active": false,
+                "prices": [
+                  {
+                    "decimal": 1.2
+                  }
+                ]
+              },
+              {
+                "name": "Al Ettifaq",
+                "type": "MR",
+                "subType": "A",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 8.0
+                  }
+                ]
+              },
+              {
+                "name": "X",
+                "type": "MR",
+                "subType": "D",
+                "active": true,
+                "prices": [
+                  {
+                    "decimal": 5.25
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "extensions": null,
+  "errors": []
+}
