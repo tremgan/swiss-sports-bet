@@ -13,6 +13,7 @@ moment the error came from the match rather than the odds.
 
 import logging
 import os
+import sys
 import time
 from collections.abc import Callable
 
@@ -182,3 +183,33 @@ def run_forever(
         )
         logger.info(f"sleeping {frequency_hours}h until next run")
         time.sleep(frequency_hours * SECONDS_PER_HOUR)
+
+
+def run_from_cli(
+    bookmaker: str,
+    scrape_fn: ScrapeFn,
+    *,
+    session: requests.Session | None = None,
+    logger: logging.Logger | None = None,
+    argv: list[str] | None = None,
+) -> None:
+    """Entry point for both scrapers: one cycle with `--once`, else a daemon.
+
+    A scheduled job supplies the interval itself, so there is nothing for
+    `run_forever` to do there and a container that never exits would hold the
+    runner open until it timed out.
+    """
+    argv = sys.argv[1:] if argv is None else argv
+    session = build_session() if session is None else session
+    logger = logging.getLogger(bookmaker) if logger is None else logger
+
+    if "--once" in argv:
+        run_once(
+            bookmaker,
+            scrape_fn,
+            db_service_url=db_service_url(),
+            session=session,
+            logger=logger,
+        )
+    else:
+        run_forever(bookmaker, scrape_fn, session=session, logger=logger)

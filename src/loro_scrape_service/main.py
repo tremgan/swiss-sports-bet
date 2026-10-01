@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from core.logging_config import setup_logging
 from core.models import BookmakerMatchCreate, SportsBettingOddsCreate
-from core.scraper import ScrapedPair, build_session, run_forever
+from core.scraper import ScrapedPair, build_session, run_from_cli
 
 logger = setup_logging("loro_scraper")
 
@@ -191,4 +191,4 @@ def scrape(session: requests.Session) -> list[ScrapedPair]:
 
 if __name__ == "__main__":
     http = build_session()
-    run_forever(BOOKMAKER, lambda: scrape(http), session=http, logger=logger)
+    run_from_cli(BOOKMAKER, lambda: scrape(http), session=http, logger=logger)

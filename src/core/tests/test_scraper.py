@@ -7,7 +7,7 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from core.models import BookmakerMatchCreate, SportsBettingOddsCreate
-from core.scraper import build_session, publish
+from core.scraper import build_session, publish, run_from_cli
 
 DB_URL = "http://db-service.test"
 logger = logging.getLogger("test")
@@ -125,3 +125,33 @@ def test_build_session_retries_get_but_not_post_on_server_errors():
     assert retry.is_retry("GET", 503) is True
     assert retry.is_retry("POST", 503) is False
     assert retry.connect == 3
+
+
+def test_run_from_cli_runs_one_cycle_with_once_and_does_not_loop():
+    session = FakeSession([FakeResponse(200, {"id": 1}), FakeResponse(200, {"id": 9})])
+    calls: list[int] = []
+
+    def scrape_fn():
+        calls.append(1)
+        return [make_pair()]
+
+    run_from_cli("Loro", scrape_fn, session=session, logger=logger, argv=["--once"])
+
+    assert calls == [1]
+    assert [url for url, _ in session.calls] == [
+        "http://127.0.0.1:8000/bookmaker_matches/",
+        "http://127.0.0.1:8000/sports_betting_odds/",
+    ]
+
+
+def test_run_from_cli_without_once_runs_forever(monkeypatch: pytest.MonkeyPatch):
+    """Without the flag it is the daemon, so a scheduled job must pass --once."""
+    seen: dict[str, Any] = {}
+
+    def fake_run_forever(bookmaker, scrape_fn, **kwargs):
+        seen["bookmaker"] = bookmaker
+
+    monkeypatch.setattr("core.scraper.run_forever", fake_run_forever)
+    run_from_cli("Loro", lambda: [], logger=logger, argv=[])
+
+    assert seen["bookmaker"] == "Loro"
