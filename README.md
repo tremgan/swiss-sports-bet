@@ -61,25 +61,46 @@ scheduled job starts the API, scrapes into it, renders the page, and exits.
 
 ## Data Model
 
-```
-Match (canonical event)
-|-- match_label          "FC Basel vs FC Zurich"
-|-- match_datetime       2026-03-25 18:00 UTC
-|-- team1, team2
-|
-+-- BookmakerMatch (one per bookmaker per match)
-    |-- bookmaker        "Loro" / "Swisslos"
-    |-- match_label      (may differ slightly between bookmakers)
-    |-- match_datetime
-    |
-    +-- SportsBettingOdds (one per scrape run)
-        |-- team1_odds
-        |-- draw_odds
-        |-- team2_odds
-        +-- timestamp
+```mermaid
+erDiagram
+    Match |o--o{ BookmakerMatch : "resolved on write"
+    BookmakerMatch ||--o{ SportsBettingOdds : "one per scrape run"
+
+    Match {
+        int id PK
+        string match_label "FC Basel vs FC Zurich"
+        datetime match_datetime UK "kick-off, UTC"
+        string team1
+        string team2
+        string home_key UK "normalised, carries identity"
+        string away_key UK "normalised, carries identity"
+    }
+    BookmakerMatch {
+        int id PK
+        int match_id FK "null until linked"
+        string bookmaker UK "Loro or Swisslos"
+        string match_label UK "wording differs per bookmaker"
+        datetime match_datetime UK
+        string team1 "home side, kept apart from away"
+        string team2 "away side"
+    }
+    SportsBettingOdds {
+        int id PK
+        int bookmaker_match_id FK
+        datetime timestamp "indexed, one row per run"
+        float team1_odds
+        float draw_odds "null on two-way markets"
+        float team2_odds
+    }
 ```
 
-An entity diagram is in [`docs/erd.html`](docs/erd.html).
+`Match` is the canonical fixture, identified by its normalised team pair at a
+kick-off rather than by any bookmaker's label. Each bookmaker contributes a
+`BookmakerMatch`, and every scrape appends a `SportsBettingOdds` row, so prices
+accumulate rather than overwrite.
+
+`match_id` is nullable on purpose. A `BookmakerMatch` the resolver cannot place
+without guessing stays unlinked and relinks on a later run.
 
 ## Cross-Bookmaker Matching
 
@@ -170,7 +191,7 @@ swiss-sports-bet/
 |   |-- test.yaml                   # lint, type check, test (per service)
 |   +-- scrape.yaml                 # scheduled scrape, render and publish
 |-- docs/
-|   +-- erd.html                    # entity relationship diagram
+|   +-- report.png                  # screenshot of the published page
 +-- src/
     |-- core/
     |   |-- core/
