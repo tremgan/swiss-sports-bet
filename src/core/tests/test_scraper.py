@@ -4,10 +4,9 @@ from typing import Any, cast
 
 import pytest
 import requests
-from requests.adapters import HTTPAdapter
-
 from core.models import BookmakerMatchCreate, SportsBettingOddsCreate
 from core.scraper import build_session, publish, run_from_cli
+from requests.adapters import HTTPAdapter
 
 DB_URL = "http://db-service.test"
 logger = logging.getLogger("test")
@@ -44,7 +43,7 @@ def make_pair(label: str = "A vs B"):
         BookmakerMatchCreate(
             bookmaker="Loro",
             match_label=label,
-            match_datetime=datetime(2026, 3, 25, 18, 0),
+            match_datetime=datetime(2026, 3, 25, 18, 0),  # noqa: DTZ001
             team1=label.split(" vs ")[0],
             team2=label.split(" vs ")[1],
         ),
@@ -152,6 +151,6 @@ def test_run_from_cli_without_once_runs_forever(monkeypatch: pytest.MonkeyPatch)
         seen["bookmaker"] = bookmaker
 
     monkeypatch.setattr("core.scraper.run_forever", fake_run_forever)
-    run_from_cli("Loro", lambda: [], logger=logger, argv=[])
+    run_from_cli("Loro", list, logger=logger, argv=[])
 
     assert seen["bookmaker"] == "Loro"

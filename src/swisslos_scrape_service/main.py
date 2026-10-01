@@ -11,12 +11,11 @@ import time
 import zlib
 from datetime import UTC, datetime
 
-from playwright.sync_api import sync_playwright
-from pydantic import ValidationError
-
 from core.logging_config import setup_logging
 from core.models import BookmakerMatchCreate, SportsBettingOddsCreate
 from core.scraper import USER_AGENT, ScrapedPair, build_session, run_from_cli
+from playwright.sync_api import sync_playwright
+from pydantic import ValidationError
 
 logger = setup_logging("swisslos_scraper")
 
@@ -46,7 +45,7 @@ def decode_binary_payload(payload: bytes) -> dict | None:
     try:
         decompressed = zlib.decompress(payload, wbits=-15)
         return json.loads(decompressed.decode("utf-8"))
-    except Exception as exc:
+    except (zlib.error, UnicodeDecodeError, json.JSONDecodeError) as exc:
         logger.warning(f"failed to decode payload: {exc}")
         return None
 

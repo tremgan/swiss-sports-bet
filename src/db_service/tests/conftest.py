@@ -1,9 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
+from main import app, get_session
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
-
-from main import app, get_session
 
 DATABASE_URL = "sqlite:///:memory:"
 

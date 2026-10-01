@@ -3,10 +3,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import main
 import pytest
 import requests
-
-import main
 
 FIXTURE = Path(__file__).parent / "fixtures" / "event_list.json"
 
@@ -77,7 +76,7 @@ def test_kick_off_is_converted_to_naive_utc(payload):
         m for m, _ in scrape_fixture(payload) if m.match_label.startswith("St.")
     )
 
-    assert match.match_datetime == datetime(2026, 9, 12, 16, 0)
+    assert match.match_datetime == datetime(2026, 9, 12, 16, 0)  # noqa: DTZ001
     assert match.match_datetime.tzinfo is None
 
 

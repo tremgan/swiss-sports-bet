@@ -1,5 +1,4 @@
 import pytest
-
 from core.arbitrage import analyse
 
 # Best prices across these two books are 2.1 / 3.6 / 5.0, whose implied

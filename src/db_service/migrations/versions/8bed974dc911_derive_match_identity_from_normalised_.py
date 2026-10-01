@@ -24,7 +24,6 @@ from datetime import timedelta
 import sqlalchemy as sa
 import sqlmodel
 from alembic import op
-
 from core.matching import same_team, team_key
 
 # revision identifiers, used by Alembic.

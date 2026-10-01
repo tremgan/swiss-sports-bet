@@ -9,16 +9,35 @@
     --bg: #0a0a0a;
     --panel: #101010;
     --raised: #161616;
-    --line: #1e1e1e;
+    --line: #262626;
     --line-soft: #1c1c1c;
     --ink: #ededed;
-    --muted: #7c7c7c;
-    --dim: #4e4e4e;
+    --muted: #8a8a8a;
+    --dim: #6a6a6a;
     --best: #e0e0e0;
     --arb: #3ecf8e;
     --arb-dim: #14301f;
+    --arb-line: rgba(62, 207, 142, .22);
     --warm: #e0a33c;
   }
+  /* Not an inversion: the light board needs its own weights to stay as quiet. */
+  :root:has(#theme:checked) {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --raised: #f5f5f3;
+    --line: #e2e2de;
+    --line-soft: #ececea;
+    --ink: #1a1a18;
+    --muted: #6b6b65;
+    --dim: #87877f;
+    --best: #1a1a18;
+    --arb: #0b7a45;
+    --arb-dim: #e8f4ed;
+    --arb-line: rgba(11, 122, 69, .25);
+    --warm: #a9741c;
+  }
+  :root { color-scheme: dark; }
+  :root:has(#theme:checked) { color-scheme: light; }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body {
@@ -47,6 +66,18 @@
   }
   .meta a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
   .meta a:hover { color: var(--ink); }
+
+  #theme { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .theme {
+    cursor: pointer; user-select: none; font-size: .6875rem; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 4px; padding: .2rem .5rem;
+    background: var(--panel); white-space: nowrap;
+  }
+  .theme:hover { color: var(--ink); border-color: var(--dim); }
+  #theme:focus-visible + .theme { outline: 2px solid var(--warm); outline-offset: 2px; }
+  .theme .on-light { display: none; }
+  :root:has(#theme:checked) .theme .on-dark { display: none; }
+  :root:has(#theme:checked) .theme .on-light { display: inline; }
 
   /* Counts sit inline, not in tiles: the numbers are small facts, not headlines. */
   .counts {
@@ -132,7 +163,7 @@
   .note {
     margin: .875rem 0 0; padding: .5rem .75rem; font-size: .75rem;
     color: var(--arb); background: var(--arb-dim);
-    border: 1px solid rgba(62, 207, 142, .22); border-radius: 4px;
+    border: 1px solid var(--arb-line); border-radius: 4px;
   }
   .empty {
     padding: 3rem 1rem; text-align: center; color: var(--muted); font-size: .8125rem;
@@ -157,6 +188,10 @@
       1X2 · Loro vs Swisslos · {{ generated_at }} ·
       <a href="https://github.com/tremgan/swiss-sports-bet">source</a>
     </span>
+    <input type="checkbox" id="theme">
+    <label class="theme" for="theme">
+      <span class="on-dark">Light</span><span class="on-light">Dark</span>
+    </label>
   </header>
 
   <div class="counts">

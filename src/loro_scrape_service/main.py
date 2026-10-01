@@ -13,11 +13,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import requests
-from pydantic import ValidationError
-
 from core.logging_config import setup_logging
 from core.models import BookmakerMatchCreate, SportsBettingOddsCreate
 from core.scraper import ScrapedPair, build_session, run_from_cli
+from pydantic import ValidationError
 
 logger = setup_logging("loro_scraper")
 

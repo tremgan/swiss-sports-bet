@@ -10,10 +10,6 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, col, select
-
 from core.matching import same_team, team_key
 from core.models import (
     BookmakerMatch,
@@ -22,6 +18,9 @@ from core.models import (
     SportsBettingOdds,
     SportsBettingOddsCreate,
 )
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, col, select
 
 logger = logging.getLogger("db_service.repositories")
 

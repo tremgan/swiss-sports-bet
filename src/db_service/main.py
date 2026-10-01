@@ -7,11 +7,6 @@ import, so a deploy can never silently diverge from the migration history.
 from collections.abc import Iterator, Sequence
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Query, Request
-from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import Session
-
 from config import engine, logger
 from core.models import (
     BookmakerMatch,
@@ -19,7 +14,11 @@ from core.models import (
     SportsBettingOdds,
     SportsBettingOddsCreate,
 )
+from fastapi import Depends, FastAPI, Query, Request
+from fastapi.responses import JSONResponse
 from repositories import BettingRepository
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session
 
 MAX_PAGE_SIZE = 200
 

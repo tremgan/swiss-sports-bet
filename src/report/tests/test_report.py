@@ -99,6 +99,15 @@ def test_render_is_self_contained_and_shows_the_fixture():
     assert "4.83" in html  # the guaranteed profit, to two places
 
 
+def test_render_carries_a_theme_toggle_that_needs_no_javascript():
+    """The page must stay scriptless, so the toggle is a checkbox plus :has()."""
+    html = render(build_fixtures(ARBITRAGE_PAYLOAD), datetime(2026, 10, 1, tzinfo=UTC))
+
+    assert 'id="theme"' in html
+    assert ":root:has(#theme:checked)" in html
+    assert "<script" not in html
+
+
 def test_render_says_so_when_nothing_is_paired():
     html = render([], datetime(2026, 10, 1, tzinfo=UTC))
 

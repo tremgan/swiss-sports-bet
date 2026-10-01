@@ -55,9 +55,8 @@ into each of the others. There is no root-level Python project.
 | `swisslos_scrape_service` | Swisslos scraper, Playwright intercepting WebSocket frames |
 | `report` | Jinja2 renderer producing `dist/index.html` |
 
-Adding or removing a service means touching four places: `Makefile`
-(`SERVICES`), `ruff.toml` (`src`), `.github/workflows/test.yaml` (the matrix),
-and this file.
+Adding or removing a service means touching three places: `Makefile`
+(`SERVICES`), `.github/workflows/test.yaml` (the matrix), and this file.
 
 ## Commands
 
@@ -112,7 +111,9 @@ nothing currently prunes old `sportsbettingodds` rows.
 - Comments explain why, not what. Several existing comments record a decision
   and the failure that motivated it; match that register rather than narrating
   the code.
-- Line length 88, ruff formatted, `make lint` from the root covers every
-  service.
+- Ruff runs with no configuration file, on its defaults, which in ruff 0.16
+  is a broad rule set. Deliberate violations carry an inline `# noqa` with a
+  reason rather than a config exemption. Kick-offs are stored naive in UTC,
+  so `DTZ001` is suppressed at every test fixture that builds one.
 - Migrations use `render_as_batch=True` so the same migration applies to SQLite
   locally and Postgres in production.

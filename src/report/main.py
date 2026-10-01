@@ -17,10 +17,9 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-
 from core.arbitrage import analyse
 from core.logging_config import setup_logging
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 logger = setup_logging("report")
 

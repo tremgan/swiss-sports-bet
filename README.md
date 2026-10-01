@@ -177,7 +177,7 @@ rejecting any `<script` or `src=` in the rendered output.
 - rapidfuzz for fuzzy string matching across bookmakers
 - Jinja2 for rendering the static report
 - Supabase (hosted PostgreSQL) for storage, GitHub Pages for publishing
-- uv for dependency management, ruff for linting and formatting
+- uv for dependency management, ruff (unconfigured defaults) for lint and format
 - GitHub Actions for CI and for running the scheduled pipeline
 
 ## Project Structure
@@ -185,7 +185,6 @@ rejecting any `<script` or `src=` in the rendered output.
 ```
 swiss-sports-bet/
 |-- Makefile                        # sync / lint / typecheck / test / check
-|-- ruff.toml                       # lint + format config for the whole repo
 |-- .env.example                    # copy to .env
 |-- .github/workflows/
 |   |-- test.yaml                   # lint, type check, test (per service)

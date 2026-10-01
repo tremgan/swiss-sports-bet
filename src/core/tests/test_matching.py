@@ -1,5 +1,4 @@
 import pytest
-
 from core.matching import normalise, same_team, team_key
 
 # Real pairs observed in live output from both scrapers. Swisslos writes the

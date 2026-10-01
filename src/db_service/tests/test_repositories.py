@@ -1,11 +1,10 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 
-from sqlmodel import Session
-
 from core.matching import team_key
 from core.models import BookmakerMatch, Match, SportsBettingOdds
 from repositories import BettingRepository
+from sqlmodel import Session
 
 # (team1_odds, draw_odds, team2_odds, timestamp)
 Snapshots = list[tuple[float, float | None, float, datetime]]
@@ -16,7 +15,8 @@ FRESH = NOW - timedelta(minutes=5)
 OLDER_BUT_FRESH = NOW - timedelta(minutes=30)
 STALE = NOW - timedelta(hours=3)
 
-KICKOFF = datetime(2026, 3, 25, 18, 0)
+# Kick-offs are stored naive, in UTC, the way the scrapers write them.
+KICKOFF = datetime(2026, 3, 25, 18, 0)  # noqa: DTZ001
 
 
 def seed_match(
@@ -139,7 +139,7 @@ def test_orders_by_kick_off_and_paginates_over_matches(session: Session):
         seed_match(
             session,
             f"Team {day}A vs Team {day}B",
-            datetime(2026, 3, day, 18, 0),
+            datetime(2026, 3, day, 18, 0),  # noqa: DTZ001
             {
                 "Loro": [(2.1, 3.6, 4.0, FRESH)],
                 "Swisslos": [(1.8, 3.5, 5.0, FRESH)],
@@ -172,13 +172,13 @@ def test_limit_is_applied_after_filtering_not_before(session: Session):
         seed_match(
             session,
             f"Solo {day}A vs Solo {day}B",
-            datetime(2026, 3, day, 18, 0),
+            datetime(2026, 3, day, 18, 0),  # noqa: DTZ001
             {"Loro": [(2.1, 3.6, 4.0, FRESH)]},
         )
     seed_match(
         session,
         "FC Basel vs FC Zurich",
-        datetime(2026, 3, 25, 18, 0),
+        datetime(2026, 3, 25, 18, 0),  # noqa: DTZ001
         {
             "Loro": [(2.1, 3.6, 4.0, FRESH)],
             "Swisslos": [(1.8, 3.5, 5.0, FRESH)],

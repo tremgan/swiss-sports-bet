@@ -6,14 +6,13 @@ that migrations and the running app can never point at different databases.
 
 from logging.config import fileConfig
 
-from alembic import context
-from sqlmodel import SQLModel
-
 # Importing the models registers every table on SQLModel.metadata, which is what
 # autogenerate diffs the database against.
 import core.models  # noqa: F401
+from alembic import context
 from config import DATABASE_URL
 from sqlalchemy import engine_from_config, pool
+from sqlmodel import SQLModel
 
 config = context.config
 

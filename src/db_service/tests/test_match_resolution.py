@@ -3,13 +3,13 @@
 from datetime import datetime, timedelta
 
 import pytest
-from sqlmodel import Session, select
-
 from core.matching import team_key
 from core.models import BookmakerMatch, BookmakerMatchCreate, Match
 from repositories import BettingRepository
+from sqlmodel import Session, select
 
-KICKOFF = datetime(2026, 9, 12, 16, 0)
+# Naive UTC, matching what the scrapers write.
+KICKOFF = datetime(2026, 9, 12, 16, 0)  # noqa: DTZ001
 
 
 def post(

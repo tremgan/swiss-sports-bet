@@ -16,7 +16,8 @@ from alembic.config import Config
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "migrations"
 INITIAL = "7953ea54e96c"
-KICKOFF = datetime(2026, 9, 12, 16, 0)
+# Naive UTC, matching what the scrapers write.
+KICKOFF = datetime(2026, 9, 12, 16, 0)  # noqa: DTZ001
 
 
 @pytest.fixture(name="migrated")

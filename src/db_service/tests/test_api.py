@@ -1,7 +1,6 @@
+from core.models import BookmakerMatch, SportsBettingOdds
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
-
-from core.models import BookmakerMatch, SportsBettingOdds
 
 # ── root ──────────────────────────────────────────────────────────────────────
 
