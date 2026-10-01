@@ -1,10 +1,10 @@
 # 🇨🇭 Swiss Sports Bet Markets
 
-> **Disclaimer:** This project is built for **educational and portfolio purposes only**. It is not intended for commercial use, real-money betting, or any activity that violates the terms of service of the data sources referenced. The scraping code is provided as a technical demonstration of web scraping, data engineering, and microservice architecture patterns.
+> **Disclaimer:** I built this to learn and to show the work, not to bet with. Do not use it for real-money betting or anything that breaches a bookmaker's terms of service.
 
 A Python application that scrapes football (soccer) betting odds from Swiss bookmakers, links the same fixture across sources, and publishes a cross-bookmaker odds comparison with any arbitrage opportunities as a static page on GitHub Pages.
 
-The whole thing runs on free infrastructure: GitHub Actions scrapes on a schedule, Supabase stores the odds, GitHub Pages serves the result.
+It costs nothing to run. GitHub Actions does the scraping on a cron, Supabase holds the odds between runs, and GitHub Pages serves the page.
 
 **Live page: [tremgan.github.io/swiss-sports-bet](https://tremgan.github.io/swiss-sports-bet/)**, rebuilt every three hours.
 
@@ -16,7 +16,7 @@ The whole thing runs on free infrastructure: GitHub Actions scrapes on a schedul
 
 ## Project Status
 
-The pipeline runs end to end: scrape, store, link fixtures across bookmakers, detect arbitrage, publish. A scheduled GitHub Actions workflow drives it every three hours and deploys the rendered page. Alembic manages the schema, and CI runs linting, type checking and 112 tests on every push.
+Everything works: the scrape, the storage, the cross-bookmaker linking, the arbitrage maths and the published page. A workflow drives all of it every three hours. Alembic manages the schema, and CI runs ruff, pyright and 113 tests on every push.
 
 ## Architecture
 
@@ -53,50 +53,35 @@ scheduled job starts the API, scrapes into it, renders the page, and exits.
 
 ### Services
 
-**core** : Shared library. SQLModel data models, the arbitrage engine, the scrape/publish runtime both scrapers share, and one logging setup. Installed as an editable dependency via uv.
+#### core
 
-**loro_scrape_service** : Scrapes football betting odds from Loterie Romande (Loro), whose sportsbook runs on OpenBet. One `event-list` call returns fixtures and their 1X2 market together; the parser maps outcome `subType` (`H`/`D`/`A`) to odds, which is language-independent unlike the outcome names.
+The shared library: SQLModel data models, the arbitrage engine, the scrape/publish runtime both scrapers use, and one logging setup. uv installs it into each service as an editable dependency.
 
-**swisslos_scrape_service** : Scrapes football betting odds from Swisslos by launching a headless Chromium browser via Playwright, intercepting WebSocket frames, and decompressing the binary (zlib-deflate) payloads to extract event and odds data.
+#### loro_scrape_service
 
-**db_service** : FastAPI backend that stores all scraped data in a SQL database (SQLite locally, Supabase Postgres in production). Links each incoming bookmaker fixture to its canonical match as it is written, so there is no reconciliation step to run afterwards. Exposes endpoints for writing odds and reading paired cross-bookmaker odds.
+Scrapes football betting odds from Loterie Romande (Loro), whose sportsbook runs on OpenBet. One `event-list` call returns fixtures and their 1X2 market together; the parser maps outcome `subType` (`H`/`D`/`A`) to odds, which is language-independent unlike the outcome names.
 
-**report** : Renders the paired odds as a dense odds board in one self-contained HTML file, with inline CSS and no scripts, which is what GitHub Pages serves. It reads the same `GET /matches/with_odds/` payload and calls `core.arbitrage`, so the published page and the API agree on what counts as an opportunity.
+#### swisslos_scrape_service
+
+Swisslos ships its odds over a WebSocket as raw deflate, so this one drives a headless Chromium through Playwright, intercepts the frames and inflates them.
+
+#### db_service
+
+The FastAPI backend, writing to SQLite locally and Supabase Postgres in production. It links each incoming bookmaker fixture to its canonical match in the same transaction that stores it, which is why nothing has to be reconciled afterwards.
+
+#### report
+
+Renders the paired odds as one self-contained HTML file, inline CSS and no scripts, which is what GitHub Pages serves. It reads the same `GET /matches/with_odds/` payload and calls the same `core.arbitrage`, so the page and the API never disagree about what counts as an opportunity.
 
 ## Data Model
 
-```mermaid
-erDiagram
-    Match |o--o{ BookmakerMatch : "resolved on write"
-    BookmakerMatch ||--o{ SportsBettingOdds : "one per scrape run"
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/erd-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/erd-light.png">
+  <img alt="Entity relationship diagram" src="docs/erd-dark.png">
+</picture>
 
-    Match {
-        int id PK
-        string match_label "FC Basel vs FC Zurich"
-        datetime match_datetime UK "kick-off, UTC"
-        string team1
-        string team2
-        string home_key UK "normalised, carries identity"
-        string away_key UK "normalised, carries identity"
-    }
-    BookmakerMatch {
-        int id PK
-        int match_id FK "null until linked"
-        string bookmaker UK "Loro or Swisslos"
-        string match_label UK "wording differs per bookmaker"
-        datetime match_datetime UK
-        string team1 "home side, kept apart from away"
-        string team2 "away side"
-    }
-    SportsBettingOdds {
-        int id PK
-        int bookmaker_match_id FK
-        datetime timestamp "indexed, one row per run"
-        float team1_odds
-        float draw_odds "null on two-way markets"
-        float team2_odds
-    }
-```
+<sub>Source: <a href="docs/erd.mmd"><code>docs/erd.mmd</code></a>, rendered with mermaid-cli.</sub>
 
 `Match` is the canonical fixture, identified by its normalised team pair at a
 kick-off rather than by any bookmaker's label. Each bookmaker contributes a
@@ -110,24 +95,24 @@ without guessing stays unlinked and relinks on a later run.
 
 Loro and Swisslos disagree about how much of a club's name to write down: Swisslos reports "FC Thun vs Grasshopper Club Zurich" where Loro reports "Thun vs Grasshopper". Rather than score string similarity and pick a threshold, linking is deterministic.
 
-Both feeds distinguish home from away — Loro tags the sides outright, Swisslos implies them by competitor order — and their kick-off times agree, so a fixture is identified by its normalised team pair at a kick-off:
+Both feeds distinguish home from away (Loro tags the sides outright, Swisslos implies them by competitor order) and their kick-off times agree, so a fixture is identified by its normalised team pair at a kick-off:
 
-1. Reduce each team name to the tokens that carry identity — lowercased, de-accented, stripped of club decoration (`FC`, `SC`, `Borussia`, founding years) and mapped through a small exonym table (`Cologne`→`Köln`, `Milano`→`Mailand`).
+1. Reduce each team name to the tokens that carry identity: lowercased, de-accented, stripped of club decoration (`FC`, `SC`, `Borussia`, founding years) and mapped through a small exonym table (`Cologne` to `Köln`, `Milano` to `Mailand`).
 2. Compare only fixtures kicking off at the same time.
 3. Two teams are the same when their squad qualifiers are equal (a women's or reserve side is never the senior side) and one's tokens contain the other's.
 4. Both home **and** away must match.
 
 `POST /bookmaker_matches/` resolves this inside the same transaction that stores the row, so a bookmaker match is never persisted in an unresolved state.
 
-**Why the kick-off scope matters.** Token containment is only safe within a kick-off. Across a whole feed it merges genuinely different clubs — "AC Mailand" into "Inter Mailand", "AS Rom" into "Lazio Rom" — because `{mailand} ⊆ {inter, mailand}` is structurally identical to `{grasshopper} ⊆ {grasshopper, zurich}`, and the second must match. A club plays at most once at any given time, which is what makes the rule sound. Measured across 136 kick-off blocks of live data: zero ambiguous pairs.
+The kick-off scope is doing the real work here. Token containment is only safe inside one. Across a whole feed it merges clubs that have nothing to do with each other, "AC Mailand" into "Inter Mailand" and "AS Rom" into "Lazio Rom", because `{mailand} ⊆ {inter, mailand}` is structurally identical to `{grasshopper} ⊆ {grasshopper, zurich}`, and the second has to match. What makes the rule sound is that a club plays at most once at any given time. Across 136 kick-off blocks of live data there were no ambiguous pairs.
 
-When two canonical fixtures do both look plausible, the row is left unlinked rather than guessed at — a wrong link is permanent and silently corrupts the odds comparison, whereas an unlinked row is merely absent. Repair is `BettingRepository.merge_matches`, an explicit act; the scrapers re-post every fixture on every run, so a row refused once relinks itself on the next scrape.
+When two canonical fixtures both look plausible, the row stays unlinked instead of being guessed at. A wrong link is permanent and corrupts the comparison without saying so, where an unlinked row is only absent. Repairing one means calling `BettingRepository.merge_matches` deliberately. Since the scrapers re-post every fixture on every run, a row refused once relinks itself on the next scrape.
 
 ## Arbitrage Detection
 
 A bookmaker's own book always overrounds: its implied probabilities sum to more than 1, and the excess is its margin. Taking the *best* price for each outcome across several bookmakers can push that sum below 1, at which point a stake split proportional to the implied probabilities returns the same payout whichever way the match goes.
 
-`core.arbitrage.analyse()` takes the `bookmaker_odds` payload from `GET /matches/with_odds/` and returns the best price per outcome, the combined margin, and — when the book is beatable — the stake split and guaranteed profit. Two-way markets (no draw priced) are handled as well as 1X2.
+`core.arbitrage.analyse()` takes the `bookmaker_odds` payload from `GET /matches/with_odds/` and returns the best price per outcome and the combined margin. When the book is beatable it also returns the stake split and the guaranteed profit. It handles two-way markets with no draw priced as well as 1X2.
 
 ```python
 >>> from core.arbitrage import analyse
@@ -156,25 +141,26 @@ beatable sits at the top.
 Opening a row reveals every bookmaker's price with the winning one marked, the
 best price per outcome, and the stake split when the book is beatable.
 
-The layout follows a financial terminal rather than a card feed: a fixed
-numeric grid, tabular figures so digits line up column-wise, hairline rules,
-and uppercase micro-labels. Nineteen fixtures fit on one screen, which matters
-because comparing margins means reading them against each other.
+The layout borrows from a financial terminal: a fixed numeric grid, tabular
+figures so digits line up down the column, and hairline rules. Nineteen
+fixtures fit on one screen, which is the point, because reading a margin means
+reading it against the others.
 
-Colour carries exactly one meaning each. Green marks an arbitrage, including
-the margin itself, which goes green exactly when it goes negative. An amber dot
-marks the bookmaker holding a best price. Everything else is greyscale.
+Each colour means one thing. Green is arbitrage, including the margin itself,
+which turns green exactly when it turns negative. An amber dot marks the
+bookmaker holding a best price. The rest is greyscale.
 
-Dark is the default. The toggle in the header switches to a light palette that
-is its own set of weights rather than an inversion, because the same greys read
-louder against white. It is a hidden checkbox the root reacts to through
-`:has()`, so the page stays scriptless; the cost is that the choice does not
-survive a reload. The screenshot above follows whichever theme GitHub is in.
+Dark is the default, and the header carries a toggle for light. The light
+palette has its own weights instead of being an inversion, since the same greys
+shout against white. The toggle is a hidden checkbox that the root reacts to
+through `:has()`, which keeps the page scriptless at the cost of forgetting
+your choice on reload. The screenshot above follows whichever theme GitHub is
+in.
 
-The file is self-contained. All CSS is inline and there are no scripts and no
-external assets, because GitHub Pages serves it from a bare directory and a
-page that half-loads is worse than a plain one. A test asserts this by
-rejecting any `<script` or `src=` in the rendered output.
+Nothing in the file loads from anywhere else. The CSS is inline, there are no
+scripts and no external assets, because a page that half-loads is worse than a
+plain one. A test enforces it by rejecting any `<script` or `src=` in the
+rendered output.
 
 ## Tech Stack
 
@@ -199,8 +185,9 @@ swiss-sports-bet/
 |   |-- test.yaml                   # lint, type check, test (per service)
 |   +-- scrape.yaml                 # scheduled scrape, render and publish
 |-- docs/
-|   |-- report-dark.png             # screenshot, dark theme
-|   +-- report-light.png            # screenshot, light theme
+|   |-- erd.mmd                     # schema diagram source
+|   |-- erd-*.png                   # rendered, one per theme
+|   +-- report-*.png                # screenshot, one per theme
 +-- src/
     |-- core/
     |   |-- core/
@@ -387,7 +374,9 @@ Deployment history is at
 
 ## Roadmap
 
-- **Real-time alerts** : notify via Telegram or webhook when an arbitrage opportunity is detected
-- **Additional bookmakers** : extend coverage beyond Loro and Swisslos
-- **Historical odds tracking** : chart odds movement over time on the published page
-- **Scraper parser tests** : record WebSocket/API fixtures and cover the parsing paths
+- Alert over Telegram or a webhook when an arbitrage shows up, rather than
+  waiting for someone to open the page
+- Cover more bookmakers than Loro and Swisslos
+- Chart how the odds moved, now that every scrape is kept rather than overwritten
+- Record more WebSocket and API fixtures, so the parsers are covered the way the
+  matching logic is
