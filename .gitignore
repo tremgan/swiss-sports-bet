@@ -34,3 +34,5 @@ docker-compose.override.yaml
 
 
 .claude
+# Generated report
+dist/

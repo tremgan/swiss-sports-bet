@@ -1,0 +1,95 @@
+from datetime import UTC, datetime
+
+from main import build_fixtures, render
+
+ARBITRAGE_PAYLOAD = [
+    {
+        "match": {
+            "match_label": "Deutschland vs Serbien",
+            "match_datetime": "2026-10-01T18:45:00",
+        },
+        "bookmaker_odds": {
+            "Swisslos": {
+                "team1_odds": 1.8,
+                "draw_odds": 3.5,
+                "team2_odds": 5.0,
+                "timestamp": "2026-10-01T09:00:00",
+            },
+            "Loro": {
+                "team1_odds": 2.1,
+                "draw_odds": 3.6,
+                "team2_odds": 4.0,
+                "timestamp": "2026-10-01T09:05:00",
+            },
+        },
+    }
+]
+
+FLAT_PAYLOAD = [
+    {
+        "match": {"match_label": "A vs B", "match_datetime": "2026-10-01T18:45:00"},
+        "bookmaker_odds": {
+            "Loro": {
+                "team1_odds": 1.5,
+                "draw_odds": 3.0,
+                "team2_odds": 3.0,
+                "timestamp": "2026-10-01T09:00:00",
+            },
+        },
+    }
+]
+
+
+def test_build_fixtures_marks_arbitrage_and_the_bookmaker_holding_each_best_price():
+    (fixture,) = build_fixtures(ARBITRAGE_PAYLOAD)
+
+    assert fixture["has_arbitrage"]
+    assert fixture["margin_pct"] < 0
+    # Loro prices home and draw better, Swisslos the away side.
+    by_name = {b["name"]: b["best"] for b in fixture["bookmakers"]}
+    assert by_name["Loro"] == {"team1", "draw"}
+    assert by_name["Swisslos"] == {"team2"}
+    assert sum(b["stake_pct"] for b in fixture["best_odds"]) == 100.0
+
+
+def test_build_fixtures_leaves_stakes_empty_without_arbitrage():
+    (fixture,) = build_fixtures(FLAT_PAYLOAD)
+
+    assert not fixture["has_arbitrage"]
+    assert fixture["margin_pct"] > 0
+    assert all(b["stake_pct"] is None for b in fixture["best_odds"])
+
+
+def test_build_fixtures_sorts_the_tightest_book_first():
+    fixtures = build_fixtures(FLAT_PAYLOAD + ARBITRAGE_PAYLOAD)
+
+    assert [f["label"] for f in fixtures] == ["Deutschland vs Serbien", "A vs B"]
+
+
+def test_build_fixtures_drops_an_unpriceable_market_rather_than_failing():
+    """One broken market must not cost the run its whole page."""
+    unpriceable = [
+        {
+            "match": {"match_label": "C vs D", "match_datetime": "2026-10-01T18:45:00"},
+            "bookmaker_odds": {"Loro": {"timestamp": "2026-10-01T09:00:00"}},
+        }
+    ]
+
+    assert build_fixtures(unpriceable + ARBITRAGE_PAYLOAD) == build_fixtures(
+        ARBITRAGE_PAYLOAD
+    )
+
+
+def test_render_is_self_contained_and_shows_the_fixture():
+    html = render(build_fixtures(ARBITRAGE_PAYLOAD), datetime(2026, 10, 1, tzinfo=UTC))
+
+    assert "Deutschland vs Serbien" in html
+    assert "<script" not in html
+    assert "src=" not in html  # no external asset can fail to load
+    assert "4.83" in html  # the guaranteed profit, to two places
+
+
+def test_render_says_so_when_nothing_is_paired():
+    html = render([], datetime(2026, 10, 1, tzinfo=UTC))
+
+    assert "No fixture is currently priced by more than one bookmaker." in html

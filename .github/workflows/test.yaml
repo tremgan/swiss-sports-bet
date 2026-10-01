@@ -40,6 +40,7 @@ jobs:
           - loro_scrape_service
           - swisslos_scrape_service
           - dashboard
+          - report
 
     steps:
       - name: Checkout

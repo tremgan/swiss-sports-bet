@@ -1,4 +1,4 @@
-SERVICES := core db_service loro_scrape_service swisslos_scrape_service dashboard
+SERVICES := core db_service loro_scrape_service swisslos_scrape_service dashboard report
 
 .PHONY: sync test typecheck lint format check
 
