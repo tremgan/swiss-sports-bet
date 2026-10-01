@@ -31,6 +31,8 @@ htmlcov/
 
 
 .claude
+# Names the Supabase project this repo talks to, and the repo is public.
+.mcp.json
 # Generated report
 dist/
 

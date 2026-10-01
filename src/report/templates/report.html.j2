@@ -160,6 +160,12 @@
   tr:last-child td { border-bottom: 0; }
   td.best { color: var(--ink); font-weight: 600; }
   td.best::after { content: "·"; color: var(--warm); margin-left: .3rem; }
+  /* The link is the bookmaker's name, so it carries no colour of its own: an
+     underline on hover is enough, and keeps the table reading as a table. */
+  a.book { text-decoration: none; }
+  a.book:hover { text-decoration: underline; }
+  .out { color: var(--dim); font-size: .625rem; margin-left: .25rem; }
+  a.book:hover .out { color: var(--muted); }
   .note {
     margin: .875rem 0 0; padding: .5rem .75rem; font-size: .75rem;
     color: var(--arb); background: var(--arb-dim);
@@ -234,7 +240,13 @@
           <tr><th>Bookmaker</th><th>Home</th><th>Draw</th><th>Away</th><th>Updated</th></tr>
           {% for b in fixture.bookmakers %}
           <tr>
-            <td>{{ b.name }}</td>
+            <td>
+              {% if b.url %}
+              <a class="book" href="{{ b.url }}" rel="noopener noreferrer nofollow" target="_blank">{{ b.name }}<span class="out" aria-hidden="true">&#8599;</span></a>
+              {% else %}
+              {{ b.name }}
+              {% endif %}
+            </td>
             <td{% if "team1" in b.best %} class="best"{% endif %}>{{ b.team1_odds }}</td>
             <td{% if "draw" in b.best %} class="best"{% endif %}>{{ b.draw_odds if b.draw_odds else "—" }}</td>
             <td{% if "team2" in b.best %} class="best"{% endif %}>{{ b.team2_odds }}</td>

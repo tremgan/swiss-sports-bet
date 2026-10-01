@@ -64,8 +64,8 @@ Run anything else from inside the service directory, since each has its own
 venv. `make typecheck` loops because pyright needs each service's own venv to
 resolve its dependencies.
 
-Tests at last count: 113 across core (48), db_service (42),
-loro_scrape_service (14), swisslos_scrape_service (2) and report (7).
+Tests at last count: 120 across core (48), db_service (42),
+loro_scrape_service (15), swisslos_scrape_service (5) and report (10).
 
 ## Gotchas
 
@@ -100,6 +100,18 @@ relinks on the next scrape. Keep that bias.
 **Free tier limits.** Supabase pauses a project after 7 days of inactivity; the
 three-hourly cron is what keeps it awake. Storage is capped at 500 MB, and
 nothing currently prunes old `sportsbettingodds` rows.
+
+**Neither feed carries a link, and the two are recovered differently.**
+`bookmakermatch.url` is what the report links a bookmaker's name to, and each
+scraper earns it its own way. Loro's sportsbook routes on the event id alone —
+`/sports/fr/sportif/evenement/<id>` — so the sport and fixture slugs a real URL
+also carries can be dropped; French because the de-CH route redirects to
+`/not-found` whatever locale the feed is scraped in. Swisslos needs a `?t=`
+round id that is nowhere in the WebSocket frames, so the scraper reads the
+anchors out of the DOM instead and keys them on a `<home>-vs-<away>` slug. That
+slug is the weak joint: the page shortens some names ("Real Sociedad San
+Sebastian B" is `u21-real-sociedad`), and those fixtures go unlinked rather than
+linked to a neighbour. Expect one or two of twenty to have no Swisslos link.
 
 **The published page must stay scriptless.** A test rejects any `<script` or
 `src=` in the rendered output, so anything interactive has to be done in CSS.

@@ -24,6 +24,12 @@ BOOKMAKER = "Loro"
 LORO_API_URL = (
     "https://content.sportbetting.jeux.loro.ch/content-service/api/v1/q/event-list"
 )
+# The feed carries no link, but the sportsbook routes on the event id alone:
+# the sport/competition/fixture slugs a real URL also carries are decorative,
+# and dropping them still lands on the event. French because that is the route
+# Loterie Romande actually serves — the de-CH equivalent redirects to
+# /not-found, whatever the feed is scraped in.
+LORO_EVENT_URL = "https://jeux.loro.ch/sports/fr/sportif/evenement/{event_id}"
 
 # From the drilldown tree: node 11, "Football", code "soccer".
 FOOTBALL_DRILLDOWN_TAG = "11"
@@ -158,6 +164,7 @@ def _parse_event(event: dict[str, Any]) -> ScrapedPair | None:
                 match_datetime=match_datetime,
                 team1=teams["HOME"],
                 team2=teams["AWAY"],
+                url=LORO_EVENT_URL.format(event_id=event["id"]),
             ),
             SportsBettingOddsCreate(
                 team1_odds=prices[HOME],

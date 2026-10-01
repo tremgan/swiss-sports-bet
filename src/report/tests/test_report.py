@@ -20,6 +20,7 @@ ARBITRAGE_PAYLOAD = [
                 "draw_odds": 3.6,
                 "team2_odds": 4.0,
                 "timestamp": "2026-10-01T09:05:00",
+                "url": "https://jeux.loro.ch/sports/fr/sportif/evenement/74820",
             },
         },
     }
@@ -112,3 +113,18 @@ def test_render_says_so_when_nothing_is_paired():
     html = render([], datetime(2026, 10, 1, tzinfo=UTC))
 
     assert "No fixture is currently priced by more than one bookmaker." in html
+
+
+def test_render_links_a_bookmaker_to_its_own_page_for_the_fixture():
+    html = render(build_fixtures(ARBITRAGE_PAYLOAD), datetime(2026, 10, 1, tzinfo=UTC))
+
+    assert 'href="https://jeux.loro.ch/sports/fr/sportif/evenement/74820"' in html
+    assert 'rel="noopener noreferrer nofollow"' in html
+
+
+def test_render_leaves_an_unlinked_bookmaker_as_plain_text():
+    """Swisslos carries no url in the payload above, so it must not gain a link."""
+    html = render(build_fixtures(ARBITRAGE_PAYLOAD), datetime(2026, 10, 1, tzinfo=UTC))
+
+    assert "Swisslos" in html
+    assert html.count('<a class="book"') == 1

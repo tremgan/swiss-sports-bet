@@ -71,6 +71,15 @@ def test_bookmaker_is_tagged(payload):
     assert all(m.bookmaker == "Loro" for m, _ in scrape_fixture(payload))
 
 
+def test_links_the_fixture_by_its_event_id(payload):
+    """The sportsbook routes on the id; the slugs a real URL carries are decorative."""
+    match = next(
+        m for m, _ in scrape_fixture(payload) if m.match_label.startswith("St.")
+    )
+
+    assert match.url == "https://jeux.loro.ch/sports/fr/sportif/evenement/74820"
+
+
 def test_kick_off_is_converted_to_naive_utc(payload):
     match = next(
         m for m, _ in scrape_fixture(payload) if m.match_label.startswith("St.")

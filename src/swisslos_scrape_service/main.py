@@ -4,12 +4,21 @@ Swisslos has no public odds API: the page opens a WebSocket and streams
 zlib-deflated JSON frames. So the scraper drives a headless Chromium, taps the
 frames as they arrive, inflates them, and rebuilds the entity graph
 (Competitor / Selection / Market / Event) they describe.
+
+The link to a fixture's own page comes from the DOM rather than the frames: an
+Event carries a competition and a round, but the URL also needs a `?t=` round
+id that is nowhere on the wire. The anchors are already rendered beside the
+odds, so the browser the scraper is driving anyway is the cheapest place to
+read them.
 """
 
 import json
+import re
 import time
+import unicodedata
 import zlib
 from datetime import UTC, datetime
+from urllib.parse import urljoin
 
 from core.logging_config import setup_logging
 from core.models import BookmakerMatchCreate, SportsBettingOddsCreate
@@ -21,11 +30,27 @@ logger = setup_logging("swisslos_scraper")
 
 BOOKMAKER = "Swisslos"
 SWISSLOS_URL = "https://www.swisslos.ch/de/sporttip/sportwetten/fussball"
+SWISSLOS_BASE_URL = "https://www.swisslos.ch"
 
 # The page streams its book progressively, so the frames are collected for a
-# fixed window rather than waiting on any one signal.
+# fixed window rather than waiting on any one signal. The window is spent
+# scrolling rather than sleeping, because the list renders as it is reached and
+# an anchor that never rendered cannot be read.
 FRAME_COLLECTION_SECONDS = 60
+SCROLL_STEP_PX = 4000
+SCROLL_INTERVAL_MS = 1500
 PAGE_LOAD_TIMEOUT_MS = 180_000
+
+# .../fussball/<competition>[/<round>]/<home>-vs-<away>[?t=<round id>]
+FIXTURE_HREF = re.compile(
+    r"/de/sporttip/sportwetten/fussball/.+?/([a-z0-9-]+-vs-[a-z0-9-]+)(?:\?|$)"
+)
+
+# Umlauts reach the URL transliterated, not stripped: "Türkei" is "tuerkei" and
+# "Färöer" is "faeroeer", so folding them to ASCII first would miss both.
+UMLAUTS = str.maketrans(
+    {"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "ae", "Ö": "oe", "Ü": "ue", "ß": "ss"}
+)
 
 # Swisslos' internal URNs for the 1X2 market and its three outcomes.
 MARKET_TYPE_1X2 = "asw:markettype:1"
@@ -50,9 +75,42 @@ def decode_binary_payload(payload: bytes) -> dict | None:
         return None
 
 
-def collect_messages() -> list[dict]:
-    """Drive the page and return every WebSocket frame decoded during the window."""
+def _slug(name: str) -> str:
+    """Fold a team name the way Swisslos folds it into a URL."""
+    folded = unicodedata.normalize("NFKD", name.translate(UMLAUTS).lower())
+    ascii_only = folded.encode("ascii", "ignore").decode()
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", ascii_only)).strip("-")
+
+
+def fixture_slug(team1: str, team2: str) -> str:
+    """The `<home>-vs-<away>` segment identifying a fixture in its URL."""
+    return f"{_slug(team1)}-vs-{_slug(team2)}"
+
+
+def harvest_links(page) -> dict[str, str]:
+    """Map each rendered fixture's slug to its absolute URL.
+
+    Keyed on the slug because the href carries no event id, so the fixture's
+    own team names are the only thing both sides share. A name the page
+    shortens — "Real Sociedad San Sebastian B" is "u21-real-sociedad" there —
+    simply does not match, and that fixture goes unlinked rather than linked
+    to a neighbour.
+    """
+    links: dict[str, str] = {}
+    hrefs = page.eval_on_selector_all(
+        "a[href]", "els => els.map(e => e.getAttribute('href'))"
+    )
+    for href in hrefs:
+        found = FIXTURE_HREF.search(href) if href else None
+        if found:
+            links[found.group(1)] = urljoin(SWISSLOS_BASE_URL, href)
+    return links
+
+
+def collect_messages() -> tuple[list[dict], dict[str, str]]:
+    """Drive the page, returning its decoded frames and its fixture links."""
     messages: list[dict] = []
+    links: dict[str, str] = {}
     logger.info("launching headless browser...")
 
     with sync_playwright() as playwright:
@@ -81,15 +139,21 @@ def collect_messages() -> list[dict]:
         logger.info(
             f"page loaded, collecting frames for {FRAME_COLLECTION_SECONDS}s..."
         )
-        time.sleep(FRAME_COLLECTION_SECONDS)
+        deadline = time.monotonic() + FRAME_COLLECTION_SECONDS
+        while time.monotonic() < deadline:
+            page.mouse.wheel(0, SCROLL_STEP_PX)
+            page.wait_for_timeout(SCROLL_INTERVAL_MS)
+            # Harvested every pass, not once at the end: the list virtualises,
+            # so an anchor scrolled past may no longer be in the DOM.
+            links.update(harvest_links(page))
         page.close()
         browser.close()
 
-    logger.info(f"collected {len(messages)} websocket messages")
-    return messages
+    logger.info(f"collected {len(messages)} websocket messages, {len(links)} links")
+    return messages, links
 
 
-def parse_messages(messages: list[dict]) -> list[ScrapedPair]:
+def parse_messages(messages: list[dict], links: dict[str, str]) -> list[ScrapedPair]:
     """Rebuild the entity graph from the frames and emit (match, odds) pairs."""
     competitors: dict[str, str] = {}
     selections: dict[str, dict] = {}
@@ -211,6 +275,7 @@ def parse_messages(messages: list[dict]) -> list[ScrapedPair]:
                         match_datetime=match_datetime,
                         team1=team1,
                         team2=team2,
+                        url=links.get(fixture_slug(team1, team2)),
                     ),
                     SportsBettingOddsCreate(
                         team1_odds=odds_by_type["home"],
@@ -224,12 +289,13 @@ def parse_messages(messages: list[dict]) -> list[ScrapedPair]:
             skipped += 1
             continue
 
-    logger.info(f"parsed {len(pairs)} matches, skipped {skipped}")
+    linked = sum(1 for match, _ in pairs if match.url)
+    logger.info(f"parsed {len(pairs)} matches ({linked} linked), skipped {skipped}")
     return pairs
 
 
 def scrape() -> list[ScrapedPair]:
-    return parse_messages(collect_messages())
+    return parse_messages(*collect_messages())
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """Parser tests against the frame shape Swisslos actually sends."""
 
-from main import parse_messages
+from main import fixture_slug, parse_messages
 
 
 def frame(entities: list[dict]) -> dict:
@@ -71,7 +71,7 @@ def test_german_competitor_name_is_preferred_over_the_english_one():
         )
     ]
 
-    ((match, odds),) = parse_messages(messages)
+    ((match, odds),) = parse_messages(messages, {})
 
     assert (match.team1, match.team2) == ("Deutschland", "Serbien")
     assert match.match_label == "Deutschland vs Serbien"
@@ -90,6 +90,49 @@ def test_falls_back_to_the_plain_name_when_there_is_no_german_form():
         )
     ]
 
-    ((match, _),) = parse_messages(messages)
+    ((match, _),) = parse_messages(messages, {})
 
     assert (match.team1, match.team2) == ("Portugal", "Israel")
+
+
+def test_a_fixture_takes_the_link_harvested_for_its_slug():
+    messages = [
+        frame(
+            [
+                competitor("c:1", "Turkey", "Türkei"),
+                competitor("c:2", "Faroe Islands", "Färöer"),
+                *one_x_two("e:1", "c:1", "c:2"),
+            ]
+        )
+    ]
+    url = "https://www.swisslos.ch/de/sporttip/sportwetten/fussball/x/tuerkei-vs-faeroeer?t=1"
+
+    ((match, _),) = parse_messages(messages, {"tuerkei-vs-faeroeer": url})
+
+    # Umlauts are transliterated into the slug, not stripped.
+    assert match.url == url
+
+
+def test_a_fixture_the_page_never_rendered_goes_unlinked():
+    """No link beats a wrong one, and the odds are worth publishing regardless."""
+    messages = [
+        frame(
+            [
+                competitor("c:1", "Portugal"),
+                competitor("c:2", "Israel"),
+                *one_x_two("e:1", "c:1", "c:2"),
+            ]
+        )
+    ]
+
+    ((match, _),) = parse_messages(messages, {"spanien-vs-tschechien": "https://x"})
+
+    assert match.url is None
+
+
+def test_fixture_slug_folds_names_the_way_the_urls_do():
+    assert fixture_slug("Bosnien-Herzegowina", "Schweden") == (
+        "bosnien-herzegowina-vs-schweden"
+    )
+    assert fixture_slug("Südkorea", "Venezuela") == "suedkorea-vs-venezuela"
+    assert fixture_slug("St. Gallen", "Sion") == "st-gallen-vs-sion"

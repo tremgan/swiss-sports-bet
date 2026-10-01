@@ -285,7 +285,9 @@ class BettingRepository:
 
         ranked = self._latest_odds_subquery()
         rows = self.session.exec(
-            select(Match, BookmakerMatch.bookmaker, SportsBettingOdds)
+            select(
+                Match, BookmakerMatch.bookmaker, BookmakerMatch.url, SportsBettingOdds
+            )
             .join(BookmakerMatch, col(BookmakerMatch.match_id) == Match.id)
             .join(
                 SportsBettingOdds,
@@ -300,7 +302,7 @@ class BettingRepository:
         ).all()
 
         by_match: dict[int, dict[str, Any]] = {}
-        for match, bookmaker, odds in rows:
+        for match, bookmaker, url, odds in rows:
             # Rows come straight from the database, so the id is always set.
             entry = by_match.setdefault(
                 cast(int, match.id), {"match": match, "bookmaker_odds": {}}
@@ -310,6 +312,7 @@ class BettingRepository:
                 "draw_odds": odds.draw_odds,
                 "team2_odds": odds.team2_odds,
                 "timestamp": odds.timestamp,
+                "url": url,
             }
 
         # Preserve the page's ordering from the first query.

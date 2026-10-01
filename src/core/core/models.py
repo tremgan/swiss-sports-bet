@@ -63,6 +63,10 @@ class BookmakerMatchBase(SQLModel):
     # only implies them by competitor order — see its parser for what that costs.
     team1: str
     team2: str
+    # Where to read this price on the bookmaker's own site. Optional because
+    # neither feed carries one: each scraper recovers it by its own means and
+    # may come back empty, and a fixture without a link is still worth showing.
+    url: str | None = None
 
 
 class BookmakerMatch(BookmakerMatchBase, table=True):

@@ -98,6 +98,9 @@ def build_fixtures(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         "draw_odds": odds["draw_odds"],
                         "team2_odds": odds["team2_odds"],
                         "updated": to_local(odds["timestamp"]).strftime("%H:%M"),
+                        # Absent whenever a scraper could not recover one; the
+                        # row still renders, just without a link.
+                        "url": odds.get("url"),
                         # Marks the cell holding the best price for an outcome.
                         "best": {
                             outcome
