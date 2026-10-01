@@ -80,6 +80,16 @@ def test_build_fixtures_drops_an_unpriceable_market_rather_than_failing():
     )
 
 
+def test_build_fixtures_lays_the_columns_out_as_1x2_holding_the_best_price():
+    """The collapsed row shows the best price available for each outcome."""
+    (fixture,) = build_fixtures(ARBITRAGE_PAYLOAD)
+
+    assert [c["key"] for c in fixture["columns"]] == ["1", "X", "2"]
+    # Loro prices home and draw better, Swisslos the away side.
+    assert [c["price"] for c in fixture["columns"]] == [2.1, 3.6, 5.0]
+    assert [c["bookmaker"] for c in fixture["columns"]] == ["Loro", "Loro", "Swisslos"]
+
+
 def test_render_is_self_contained_and_shows_the_fixture():
     html = render(build_fixtures(ARBITRAGE_PAYLOAD), datetime(2026, 10, 1, tzinfo=UTC))
 

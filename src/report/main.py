@@ -32,6 +32,9 @@ DEFAULT_OUTPUT = Path("dist/index.html")
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 
 OUTCOME_LABELS = {"team1": "Home", "draw": "Draw", "team2": "Away"}
+# 1X2 is how both bookmakers label the market, and the column order readers
+# expect on a coupon.
+OUTCOME_ORDER = (("team1", "1"), ("draw", "X"), ("team2", "2"))
 
 
 def fetch_matches_with_odds(url: str = DB_SERVICE_URL) -> list[dict[str, Any]]:
@@ -71,6 +74,20 @@ def build_fixtures(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "kickoff": to_local(match["match_datetime"]).strftime(
                     "%a %d %b, %H:%M"
                 ),
+                "kickoff_day": to_local(match["match_datetime"]).strftime("%a %d %b"),
+                "kickoff_time": to_local(match["match_datetime"]).strftime("%H:%M"),
+                "columns": [
+                    {
+                        "key": label,
+                        "price": result.best_odds[outcome][1]
+                        if outcome in result.best_odds
+                        else None,
+                        "bookmaker": result.best_odds[outcome][0]
+                        if outcome in result.best_odds
+                        else None,
+                    }
+                    for outcome, label in OUTCOME_ORDER
+                ],
                 "margin_pct": result.margin_pct,
                 "has_arbitrage": result.has_arbitrage,
                 "profit_pct": result.profit_pct,
