@@ -69,6 +69,16 @@ loro_scrape_service (15), swisslos_scrape_service (5) and report (10).
 
 ## Gotchas
 
+**There is no `.env`, on purpose.** Actions supplies `DATABASE_URL` from
+repository secrets, so nothing in CI ever wanted one. The file that used to sit
+at the repo root carried production, and `load_dotenv()` walks *up* from the
+working directory — so anything started anywhere inside the repo, a test run or
+a stray `uvicorn` included, silently got production credentials. One such server
+was still listening on a local port hours later and took a full scrape.
+`config.py` now pins the lookup to its own directory, and a local run with no
+`DATABASE_URL` gets no engine at all. Name the database you mean:
+`DATABASE_URL="sqlite:///dev.db" uv run uvicorn main:app`.
+
 **The Supabase connection string has three constraints at once.** Use the
 session pooler (`<region>.pooler.supabase.com`, port 5432) with the
 `postgresql+psycopg://` scheme. The direct connection is IPv6-only on the free
