@@ -119,6 +119,14 @@ The light/dark toggle is a hidden checkbox that `:root:has(#theme:checked)`
 reacts to, which is why the theme choice does not survive a reload. Do not
 reach for JavaScript without deciding to drop that test first.
 
+**The runner image is pinned, the way ruff is not.** Every job says
+`ubuntu-24.04` rather than `ubuntu-latest`, which GitHub migrates to Ubuntu 26
+from 19 October 2026. The Swisslos scraper installs Chromium with
+`playwright install --with-deps` on the runner, so the OS is a real dependency
+of the scrape rather than a detail, and a silent image bump would land first on
+the scheduled job — where a failure is a missing page, not a red check anyone
+is watching. Bump it deliberately when there is a reason to.
+
 **Ruff has no config file, on purpose.** Its defaults in 0.16 are a broad rule
 set, broader than the curated `select` the repo used to carry. That means the
 lint surface depends on the installed ruff version, and CI pulls the latest. If
