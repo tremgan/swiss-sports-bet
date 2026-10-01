@@ -6,6 +6,10 @@ A Python application that scrapes football (soccer) betting odds from Swiss book
 
 The whole thing runs on free infrastructure: GitHub Actions scrapes on a schedule, Supabase stores the odds, GitHub Pages serves the result.
 
+**Live page: [tremgan.github.io/swiss-sports-bet](https://tremgan.github.io/swiss-sports-bet/)**, rebuilt every three hours.
+
+![The published odds comparison](docs/report.png)
+
 ## Project Status
 
 The pipeline runs end to end: scrape, store, link fixtures across bookmakers, detect arbitrage, publish. A scheduled GitHub Actions workflow drives it every three hours and deploys the rendered page. Alembic manages the schema, and CI runs linting, type checking and 112 tests on every push.
@@ -293,7 +297,21 @@ It needs one repository secret, `DATABASE_URL`, holding the same session pooler
 URI described above.
 
 Both `schedule:` and `workflow_dispatch:` only fire from the default branch, so
-the pipeline does not run until these changes are merged to `main`.
+changes to the pipeline have to reach `main` before they take effect.
+
+### How the page gets deployed
+
+`src/report` writes one self-contained `index.html` into `dist/`.
+`upload-pages-artifact` uploads that directory, and a separate `publish` job
+calls `deploy-pages` on it.
+
+Pages is configured with `build_type: workflow`, so GitHub's CDN serves the
+artifact directly. There is no `gh-pages` branch, and nothing in the repository
+holds the built page (`dist/` is gitignored). Each run replaces the previous
+deployment.
+
+Deployment history is at
+[/deployments](https://github.com/tremgan/swiss-sports-bet/deployments).
 
 ## API Endpoints
 
