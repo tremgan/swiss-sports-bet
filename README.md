@@ -8,7 +8,11 @@ The whole thing runs on free infrastructure: GitHub Actions scrapes on a schedul
 
 **Live page: [tremgan.github.io/swiss-sports-bet](https://tremgan.github.io/swiss-sports-bet/)**, rebuilt every three hours.
 
-![The published odds comparison](docs/report.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/report-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/report-light.png">
+  <img alt="The published odds comparison" src="docs/report-dark.png">
+</picture>
 
 ## Project Status
 
@@ -157,10 +161,15 @@ numeric grid, tabular figures so digits line up column-wise, hairline rules,
 and uppercase micro-labels. Nineteen fixtures fit on one screen, which matters
 because comparing margins means reading them against each other.
 
-Colour carries exactly one meaning each. Green marks an arbitrage, an amber dot
-marks the bookmaker holding a best price, and everything else is greyscale.
-There is no light theme: the palette was designed dark, and a second one would
-be two palettes to maintain where only one was designed.
+Colour carries exactly one meaning each. Green marks an arbitrage, including
+the margin itself, which goes green exactly when it goes negative. An amber dot
+marks the bookmaker holding a best price. Everything else is greyscale.
+
+Dark is the default. The toggle in the header switches to a light palette that
+is its own set of weights rather than an inversion, because the same greys read
+louder against white. It is a hidden checkbox the root reacts to through
+`:has()`, so the page stays scriptless; the cost is that the choice does not
+survive a reload. The screenshot above follows whichever theme GitHub is in.
 
 The file is self-contained. All CSS is inline and there are no scripts and no
 external assets, because GitHub Pages serves it from a bare directory and a
@@ -190,7 +199,8 @@ swiss-sports-bet/
 |   |-- test.yaml                   # lint, type check, test (per service)
 |   +-- scrape.yaml                 # scheduled scrape, render and publish
 |-- docs/
-|   +-- report.png                  # screenshot of the published page
+|   |-- report-dark.png             # screenshot, dark theme
+|   +-- report-light.png            # screenshot, light theme
 +-- src/
     |-- core/
     |   |-- core/
