@@ -66,6 +66,7 @@ class BettingRepository:
                 # The conflict was not the (bookmaker, label, datetime) unique
                 # constraint we expect, so swallowing it would hide a real fault.
                 raise
+            changed = False
             if existing.match_id is None:
                 # The row was persisted unlinked because its block was ambiguous
                 # when it first arrived. Re-posting is the only retry there is
@@ -73,10 +74,19 @@ class BettingRepository:
                 # duplicate behind the ambiguity is repaired, the next scrape
                 # run is what makes the fixture visible again.
                 existing.match_id = self._resolve_match(existing)
-                if existing.match_id is not None:
-                    self.session.add(existing)
-                    self.session.commit()
-                    self.session.refresh(existing)
+                changed = existing.match_id is not None
+            if match.url is not None and existing.url != match.url:
+                # The link is an attribute of the fixture, not part of its
+                # identity, so it is taken from the newer post. Every row
+                # predating the column would otherwise keep NULL forever —
+                # a fixture is only ever inserted once, and the report would
+                # link nothing but fixtures first seen after the migration.
+                existing.url = match.url
+                changed = True
+            if changed:
+                self.session.add(existing)
+                self.session.commit()
+                self.session.refresh(existing)
             return existing
 
     def _resolve_match(self, bookmaker_match: BookmakerMatch) -> int | None:

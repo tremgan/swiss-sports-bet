@@ -44,6 +44,32 @@ def test_create_bookmaker_match_duplicate_returns_existing(client: TestClient):
     assert response1.json()["id"] == response2.json()["id"]
 
 
+def test_reposting_fills_in_a_url_the_row_was_created_without(client: TestClient):
+    """Rows predating the url column would otherwise never gain one.
+
+    A fixture is inserted once and re-posted every run, so the duplicate path
+    is the only chance an existing row has to learn its link.
+    """
+    client.post("/bookmaker_matches/", json=MATCH_DATA)
+    linked = MATCH_DATA | {"url": "https://example.test/event/1"}
+
+    response = client.post("/bookmaker_matches/", json=linked)
+
+    assert response.status_code == 200
+    assert response.json()["url"] == "https://example.test/event/1"
+
+
+def test_reposting_without_a_url_keeps_the_one_already_stored(client: TestClient):
+    """A scraper that failed to recover a link must not erase a good one."""
+    client.post(
+        "/bookmaker_matches/", json=MATCH_DATA | {"url": "https://example.test/e"}
+    )
+
+    response = client.post("/bookmaker_matches/", json=MATCH_DATA)
+
+    assert response.json()["url"] == "https://example.test/e"
+
+
 def test_read_bookmaker_matches_empty(client: TestClient):
     response = client.get("/bookmaker_matches/")
     assert response.status_code == 200

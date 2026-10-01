@@ -113,6 +113,13 @@ slug is the weak joint: the page shortens some names ("Real Sociedad San
 Sebastian B" is `u21-real-sociedad`), and those fixtures go unlinked rather than
 linked to a neighbour. Expect one or two of twenty to have no Swisslos link.
 
+A bookmaker match is inserted once and re-posted every run, so
+`create_bookmaker_match` takes the url from the repeat post rather than
+returning the existing row untouched. Without that the column fills only for
+fixtures first seen after the migration, and a database with history — which
+production was — publishes almost no links at all. That is how this shipped
+broken the first time.
+
 **The published page must stay scriptless.** A test rejects any `<script` or
 `src=` in the rendered output, so anything interactive has to be done in CSS.
 The light/dark toggle is a hidden checkbox that `:root:has(#theme:checked)`
