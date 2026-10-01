@@ -2,17 +2,21 @@
 
 > **Disclaimer:** This project is built for **educational and portfolio purposes only**. It is not intended for commercial use, real-money betting, or any activity that violates the terms of service of the data sources referenced. The scraping code is provided as a technical demonstration of web scraping, data engineering, and microservice architecture patterns.
 
-A Python microservice application that scrapes real-time football (soccer) betting odds from multiple Swiss bookmakers, matches events across sources using fuzzy string matching, and surfaces cross-bookmaker odds comparisons and arbitrage opportunities through a Streamlit dashboard.
+A Python application that scrapes football (soccer) betting odds from Swiss bookmakers, links the same fixture across sources, and publishes a cross-bookmaker odds comparison with any arbitrage opportunities as a static page on GitHub Pages.
+
+The whole thing runs on free infrastructure: GitHub Actions scrapes on a schedule, Supabase stores the odds, GitHub Pages serves the result.
 
 ## Project Status
 
-The full pipeline is functional: scraping, storage, cross-bookmaker matching, arbitrage detection and the dashboard. Scrapers run on a configurable interval (`SCRAPE_FREQUENCY_HOURS`). The database schema is managed with Alembic migrations, and CI runs linting, type checking and 46 tests on every push.
+The pipeline runs end to end: scrape, store, link fixtures across bookmakers, detect arbitrage, publish. A scheduled GitHub Actions workflow drives it every three hours and deploys the rendered page. Alembic manages the schema, and CI runs linting, type checking and 112 tests on every push.
 
 ## Architecture
 
-Four independent services communicate over HTTP, plus a shared library:
+Four services talk over HTTP, plus a shared library. Nothing outlives a run: the
+scheduled job starts the API, scrapes into it, renders the page, and exits.
 
 ```
+                  GitHub Actions, every 3 hours
 +-----------------+   +----------------------+
 |  Loro Scraper   |   |  Swisslos Scraper    |
 |  (REST API)     |   |  (Playwright/WS)     |
@@ -21,22 +25,22 @@ Four independent services communicate over HTTP, plus a shared library:
          |   POST /bookmaker_    |
          |   matches/ & odds/    |
          v                       v
-      +-----------------------------+
-      |       DB Service            |
-      |  (FastAPI + SQLModel)       |
-      |                             |
-      |  : stores bookmaker odds    |
-      |  : fuzzy-matches events     |
-      |    across bookmakers        |
+      +-----------------------------+      +------------------+
+      |       DB Service            |----->|  Supabase        |
+      |  (FastAPI + SQLModel)       |      |  (PostgreSQL)    |
+      |                             |<-----|                  |
+      |  : stores bookmaker odds    |      +------------------+
+      |  : links events across      |
+      |    bookmakers on write      |
       |  : serves paired odds       |
       +--------------+--------------+
                      |
                      | GET /matches/with_odds/
                      v
-              +-------------+
-              |  Dashboard   |
-              | (Streamlit)  |
-              +-------------+
+              +--------------+      +----------------+
+              |    Report    |----->|  GitHub Pages  |
+              |   (Jinja2)   |      |  (index.html)  |
+              +--------------+      +----------------+
 ```
 
 ### Services
@@ -47,9 +51,9 @@ Four independent services communicate over HTTP, plus a shared library:
 
 **swisslos_scrape_service** : Scrapes football betting odds from Swisslos by launching a headless Chromium browser via Playwright, intercepting WebSocket frames, and decompressing the binary (zlib-deflate) payloads to extract event and odds data.
 
-**db_service** : FastAPI backend that stores all scraped data in a SQL database (SQLite for dev, PostgreSQL for production). Links each incoming bookmaker fixture to its canonical match as it is written, so there is no reconciliation step to run afterwards. Exposes endpoints for writing odds and reading paired cross-bookmaker odds.
+**db_service** : FastAPI backend that stores all scraped data in a SQL database (SQLite locally, Supabase Postgres in production). Links each incoming bookmaker fixture to its canonical match as it is written, so there is no reconciliation step to run afterwards. Exposes endpoints for writing odds and reading paired cross-bookmaker odds.
 
-**dashboard** : Streamlit app that displays matched events with odds from multiple bookmakers side by side, flagging arbitrage opportunities and showing the stake split for each.
+**report** : Renders the paired odds as one self-contained HTML file with inline CSS and no scripts, which is what GitHub Pages serves. It reads the same `GET /matches/with_odds/` payload and calls `core.arbitrage`, so the published page and the API agree on what counts as an opportunity.
 
 ## Data Model
 
@@ -116,10 +120,10 @@ A bookmaker's own book always overrounds: its implied probabilities sum to more 
 - Alembic for database migrations
 - Playwright for headless browser automation and WebSocket interception
 - rapidfuzz for fuzzy string matching across bookmakers
-- Streamlit for the dashboard
+- Jinja2 for rendering the static report
+- Supabase (hosted PostgreSQL) for storage, GitHub Pages for publishing
 - uv for dependency management, ruff for linting and formatting
-- Docker + Docker Compose for containerization and orchestration
-- GitHub Actions for CI/CD
+- GitHub Actions for CI and for running the scheduled pipeline
 
 ## Project Structure
 
@@ -127,11 +131,10 @@ A bookmaker's own book always overrounds: its implied probabilities sum to more 
 swiss-sports-bet/
 |-- Makefile                        # sync / lint / typecheck / test / check
 |-- ruff.toml                       # lint + format config for the whole repo
-|-- docker-compose.yaml
 |-- .env.example                    # copy to .env
 |-- .github/workflows/
 |   |-- test.yaml                   # lint, type check, test (per service)
-|   +-- deploy.yaml                 # calls test.yaml, then deploys to the VPS
+|   +-- scrape.yaml                 # scheduled scrape, render and publish
 |-- docs/
 |   +-- erd.html                    # entity relationship diagram
 +-- src/
@@ -153,11 +156,13 @@ swiss-sports-bet/
     |   +-- tests/                  # parser tests against a recorded fixture
     |-- swisslos_scrape_service/
     |   +-- main.py                 # Swisslos Playwright/WS scraper
-    +-- dashboard/
-        +-- main.py                 # Streamlit dashboard
+    +-- report/
+        |-- main.py                 # renders dist/index.html
+        |-- templates/
+        +-- tests/
 ```
 
-Each service has its own `pyproject.toml`, `uv.lock` and `Dockerfile`.
+Each service has its own `pyproject.toml` and `uv.lock`.
 
 ## Setup
 
@@ -175,10 +180,31 @@ cp .env.example .env
 
 | Variable | Used by | Purpose |
 |---|---|---|
-| `DATABASE_URL` | db_service | Database connection string (`sqlite:///dev.db` locally, PostgreSQL in production) |
-| `DB_SERVICE_URL` | scrapers, dashboard | Where to reach the API (default `http://127.0.0.1:8000`) |
-| `SCRAPE_FREQUENCY_HOURS` | scrapers | Interval between runs (default `3`) |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | docker-compose | Postgres credentials |
+| `DATABASE_URL` | db_service, alembic | Connection string (`sqlite:///dev.db` locally, Supabase session pooler in production) |
+| `DB_SERVICE_URL` | scrapers, report | Where to reach the API (default `http://127.0.0.1:8000`) |
+| `SCRAPE_FREQUENCY_HOURS` | scrapers | Interval between runs when not using `--once` (default `3`) |
+
+#### Connecting to Supabase
+
+Copy the **session pooler** URI from the Supabase dashboard (Connect, port 5432)
+and change its scheme to `postgresql+psycopg://`:
+
+```
+postgresql+psycopg://postgres.<project-ref>:<password>@<region>.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+Three details decide whether this works:
+
+- The session pooler, not the direct connection. `db.<ref>.supabase.co` resolves
+  to IPv6 only on the free tier, and GitHub Actions runners have no IPv6.
+- Port 5432, not 6543. The transaction pooler drops session state between
+  statements, which breaks `alembic upgrade head` and psycopg 3's prepared
+  statements.
+- The `postgresql+psycopg://` scheme. This project installs psycopg 3, so a bare
+  `postgresql://` URI sends SQLAlchemy looking for psycopg2, which is absent.
+
+Percent-encode any special characters in the password (`@` as `%40`, `:` as
+`%3A`, `/` as `%2F`).
 
 ### Running Locally
 
@@ -209,23 +235,19 @@ uv run playwright install chromium --with-deps
 uv run main.py
 ```
 
-3. Launch the dashboard:
+3. Render the report:
 
 ```bash
-cd src/dashboard
+cd src/report
 uv sync
-uv run streamlit run main.py
+uv run main.py ../../dist/index.html
 ```
 
-### Running with Docker Compose
+Open `dist/index.html` in a browser. This is the same file the scheduled
+workflow publishes.
 
-From the project root:
-
-```bash
-docker compose up --build
-```
-
-This starts PostgreSQL, the DB service (internal port 8000), both scrapers, and the dashboard on http://localhost:8501. The DB service runs `alembic upgrade head` on start, so the schema is always current.
+Pass `--once` to either scraper to run a single pass and exit, which is what the
+workflow does.
 
 ## Development
 
@@ -250,17 +272,28 @@ uv run alembic check                 # fails if models and migrations disagree
 
 ## CI/CD
 
-`test.yaml` runs ruff over the whole repo, then type-checks and tests each service in a matrix. `deploy.yaml` calls it and, only if it passes, SSHes into the VPS, pulls, and rebuilds the containers.
+`test.yaml` runs ruff over the whole repo, then type-checks and tests each
+service in a matrix.
 
-The workflow requires three repository secrets:
+`scrape.yaml` is the pipeline. On a `17 */3 * * *` cron it installs db_service,
+applies migrations against Supabase, starts the API on localhost for the length
+of the job, runs both scrapers with `--once`, renders `dist/index.html`, and
+deploys it to Pages.
 
-| Secret | Description |
-|---|---|
-| `VPS_HOST` | Public IP or hostname of the VPS |
-| `VPS_USER` | SSH username (e.g. `root` or a deploy user) |
-| `VPS_SSH_KEY` | Private SSH key with access to the VPS |
+A few things in it are deliberate:
 
-The project is expected to be cloned at `~/projects/sports-bet` on the VPS before the first deploy.
+- Each scraper is `continue-on-error`. One bookmaker being unreachable still
+  leaves the other's prices worth storing.
+- A guard step counts the fixtures priced by more than one bookmaker and fails
+  the job at zero, so an empty page never replaces a good one.
+- `concurrency` queues overlapping runs instead of cancelling them, letting a
+  run that already holds the database finish.
+
+It needs one repository secret, `DATABASE_URL`, holding the same session pooler
+URI described above.
+
+Both `schedule:` and `workflow_dispatch:` only fire from the default branch, so
+the pipeline does not run until these changes are merged to `main`.
 
 ## API Endpoints
 
@@ -278,5 +311,5 @@ The project is expected to be cloned at `~/projects/sports-bet` on the VPS befor
 
 - **Real-time alerts** : notify via Telegram or webhook when an arbitrage opportunity is detected
 - **Additional bookmakers** : extend coverage beyond Loro and Swisslos
-- **Historical odds tracking** : visualize odds movement over time in the dashboard
+- **Historical odds tracking** : chart odds movement over time on the published page
 - **Scraper parser tests** : record WebSocket/API fixtures and cover the parsing paths
