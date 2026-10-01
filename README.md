@@ -126,54 +126,8 @@ A bookmaker's own book always overrounds: its implied probabilities sum to more 
 ('Swisslos', 5.0)
 ```
 
-## The Published Page
 
-One row per fixture, sorted by how tight the combined book is, so anything
-beatable sits at the top.
 
-| Column | Shows |
-|---|---|
-| Fixture | Canonical match label and the matchday |
-| Kick-off | Local Swiss time |
-| 1 / X / 2 | The best price for that outcome across both bookmakers |
-| Margin | Combined overround. Negative means arbitrage |
-
-Opening a row reveals every bookmaker's price with the winning one marked, the
-best price per outcome, and the stake split when the book is beatable.
-
-The layout borrows from a financial terminal: a fixed numeric grid, tabular
-figures so digits line up down the column, and hairline rules. Nineteen
-fixtures fit on one screen, which is the point, because reading a margin means
-reading it against the others.
-
-Each colour means one thing. Green is arbitrage, including the margin itself,
-which turns green exactly when it turns negative. An amber dot marks the
-bookmaker holding a best price. The rest is greyscale.
-
-Dark is the default, and the header carries a toggle for light. The light
-palette has its own weights instead of being an inversion, since the same greys
-shout against white. The toggle is a hidden checkbox that the root reacts to
-through `:has()`, which keeps the page scriptless at the cost of forgetting
-your choice on reload. The screenshot above follows whichever theme GitHub is
-in.
-
-Nothing in the file loads from anywhere else. The CSS is inline, there are no
-scripts and no external assets, because a page that half-loads is worse than a
-plain one. A test enforces it by rejecting any `<script` or `src=` in the
-rendered output.
-
-## Tech Stack
-
-- Python 3.13, type-checked with pyright
-- FastAPI + Uvicorn for the API layer
-- SQLModel (SQLAlchemy + Pydantic) for ORM and validation
-- Alembic for database migrations
-- Playwright for headless browser automation and WebSocket interception
-- rapidfuzz for fuzzy string matching across bookmakers
-- Jinja2 for rendering the static report
-- Supabase (hosted PostgreSQL) for storage, GitHub Pages for publishing
-- uv for dependency management, ruff (unconfigured defaults) for lint and format
-- GitHub Actions for CI and for running the scheduled pipeline
 
 ## Project Structure
 
@@ -235,28 +189,7 @@ cp .env.example .env
 | `DB_SERVICE_URL` | scrapers, report | Where to reach the API (default `http://127.0.0.1:8000`) |
 | `SCRAPE_FREQUENCY_HOURS` | scrapers | Interval between runs when not using `--once` (default `3`) |
 
-#### Connecting to Supabase
-
-Copy the **session pooler** URI from the Supabase dashboard (Connect, port 5432)
-and change its scheme to `postgresql+psycopg://`:
-
-```
-postgresql+psycopg://postgres.<project-ref>:<password>@<region>.pooler.supabase.com:5432/postgres?sslmode=require
-```
-
-Three details decide whether this works:
-
-- The session pooler, not the direct connection. `db.<ref>.supabase.co` resolves
-  to IPv6 only on the free tier, and GitHub Actions runners have no IPv6.
-- Port 5432, not 6543. The transaction pooler drops session state between
-  statements, which breaks `alembic upgrade head` and psycopg 3's prepared
-  statements.
-- The `postgresql+psycopg://` scheme. This project installs psycopg 3, so a bare
-  `postgresql://` URI sends SQLAlchemy looking for psycopg2, which is absent.
-
-Percent-encode any special characters in the password (`@` as `%40`, `:` as
-`%3A`, `/` as `%2F`).
-
+#
 ### Running Locally
 
 1. Start the DB service:
