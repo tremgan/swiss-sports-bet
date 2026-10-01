@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 from core.logging_config import setup_logging
 from core.models import BookmakerMatchCreate, SportsBettingOddsCreate
-from core.scraper import USER_AGENT, ScrapedPair, build_session, run_forever
+from core.scraper import USER_AGENT, ScrapedPair, build_session, run_from_cli
 
 logger = setup_logging("swisslos_scraper")
 
@@ -30,6 +30,10 @@ PAGE_LOAD_TIMEOUT_MS = 180_000
 
 # Swisslos' internal URNs for the 1X2 market and its three outcomes.
 MARKET_TYPE_1X2 = "asw:markettype:1"
+# Competitor names are localised on the wire; this is the locale Loro is
+# scraped in, so the two feeds name a team the same way.
+COMPETITOR_LOCALE = "de"
+
 SELECTION_TYPE_MAP = {
     "asw:selectiontype:1": "home",
     "asw:selectiontype:2": "draw",
@@ -117,7 +121,16 @@ def parse_messages(messages: list[dict]) -> list[ScrapedPair]:
                 urn = entity.get("urn")
 
                 if entity_type == "Competitor":
-                    competitors[urn] = entity.get("name")
+                    # `name` is English, which only matches Loro for the names
+                    # that happen to be spelt the same in both languages:
+                    # "Germany" never meets Loro's de-CH "Deutschland", so an
+                    # international break links almost nothing. The entity
+                    # carries the German form outright. Clubs usually have no
+                    # `de` entry, and there `name` is already the German form.
+                    translations = entity.get("translations") or {}
+                    competitors[urn] = translations.get(
+                        COMPETITOR_LOCALE
+                    ) or entity.get("name")
                 elif entity_type == "Selection":
                     selections[urn] = {
                         "type": entity.get("type"),
@@ -221,4 +234,4 @@ def scrape() -> list[ScrapedPair]:
 
 
 if __name__ == "__main__":
-    run_forever(BOOKMAKER, scrape, session=build_session(), logger=logger)
+    run_from_cli(BOOKMAKER, scrape, session=build_session(), logger=logger)
