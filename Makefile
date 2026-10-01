@@ -1,4 +1,4 @@
-SERVICES := core db_service loro_scrape_service swisslos_scrape_service dashboard report
+SERVICES := core db_service loro_scrape_service swisslos_scrape_service report
 
 .PHONY: sync test typecheck lint format check
 
@@ -18,7 +18,7 @@ test:
 		fi; \
 	done
 
-# pyright needs each service's own venv to resolve sqlmodel/fastapi/streamlit.
+# pyright needs each service's own venv to resolve sqlmodel and fastapi.
 typecheck:
 	@for s in $(SERVICES); do \
 		echo "==> typecheck $$s"; \

@@ -7,7 +7,7 @@ src = [
     "src/db_service",
     "src/loro_scrape_service",
     "src/swisslos_scrape_service",
-    "src/dashboard",
+    "src/report",
 ]
 
 [lint]

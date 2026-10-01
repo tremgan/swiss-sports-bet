@@ -11,7 +11,6 @@ on:
       - 'src/**'
 
   workflow_dispatch:
-  workflow_call: # allows this workflow to be called from deploy
 
 jobs:
   lint:
@@ -39,7 +38,6 @@ jobs:
           - db_service
           - loro_scrape_service
           - swisslos_scrape_service
-          - dashboard
           - report
 
     steps:
@@ -63,7 +61,7 @@ jobs:
         run: uv sync
 
       # pyright runs per service because it needs that service's own venv to
-      # resolve sqlmodel, fastapi and streamlit.
+      # resolve sqlmodel and fastapi.
       - name: Type check
         working-directory: src/${{ matrix.service }}
         run: uv run pyright
