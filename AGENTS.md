@@ -111,6 +111,18 @@ relinks on the next scrape. Keep that bias.
 three-hourly cron is what keeps it awake. Storage is capped at 500 MB, and
 nothing currently prunes old `sportsbettingodds` rows.
 
+**Supabase's row-level-security advisory on these tables is a false positive.**
+It flags RLS as disabled on all four public tables and warns that anyone with
+the anon key can read or write every row. Nothing can: Alembic creates the
+tables as `postgres`, and `anon`, `authenticated` and `service_role` hold no
+privilege on any of them, so PostgREST refuses a request before RLS is ever
+consulted. The advisory assumes the usual Supabase project, where those grants
+exist and RLS is the only thing behind the key. Here the one way in is
+`DATABASE_URL`. Switching RLS on would not break the pipeline — db_service
+connects as `postgres`, which owns the tables and bypasses RLS — so turn it on
+if anything ever starts talking to this project with the publishable key, which
+is public by design.
+
 **Neither feed carries a link, and the two are recovered differently.**
 `bookmakermatch.url` is what the report links a bookmaker's name to, and each
 scraper earns it its own way. Loro's sportsbook routes on the event id alone —
