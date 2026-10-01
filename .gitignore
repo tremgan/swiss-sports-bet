@@ -29,10 +29,10 @@ htmlcov/
 # Logs
 *.log
 
-# Docker Compose local dev override
-docker-compose.override.yaml
-
 
 .claude
 # Generated report
 dist/
+
+# macOS
+.DS_Store
