@@ -15,31 +15,26 @@ a cron, Supabase holds the odds between runs, GitHub Pages serves the output.
 
 ## Current state (2026-10-01)
 
-Branch `scheduled-pipeline`, not yet merged to `main`.
+Everything described here is merged to `main` and running. The repository is
+public, which it has to be for Pages on a free account.
 
-Done:
+- The pipeline has completed end to end on Actions three times, publishing to
+  https://tremgan.github.io/swiss-sports-bet/ on each.
+- Supabase Postgres holds the data, migrated to head. One repository secret,
+  `DATABASE_URL`, carries the session pooler URI.
+- Pages is configured with `build_type: workflow`, so there is no `gh-pages`
+  branch and nothing in the tree holds the built page.
 
-- Supabase Postgres is live and migrated. `alembic upgrade head` has run against
-  it; `alembic_version`, `match`, `bookmakermatch` and `sportsbettingodds`
-  exist.
-- `DATABASE_URL` is set as a repository secret and in local `.env`.
-- `scrape.yaml` implements the full pipeline: migrate, serve, scrape both,
-  guard, render, deploy to Pages.
-- The VPS and Docker deployment has been removed: `docker-compose.yaml`,
-  `deploy.yaml`, all four `Dockerfile`s and `.dockerignore` are gone, along with
-  the `POSTGRES_*` variables that only compose consumed.
-- The Streamlit dashboard (`src/dashboard/`) has been deleted. `src/report/`
-  replaces it, rendering the same `GET /matches/with_odds/` payload to a file.
+Two things are worth knowing about how it got here, because the repository no
+longer shows them. It used to deploy to a VPS over SSH with docker-compose, and
+it used to serve a Streamlit dashboard. Both are gone: the job is a batch run
+that outlives nothing, so there is no container to orchestrate and no server to
+keep up. `src/report/` renders what the dashboard used to display.
 
-Not done:
-
-- The branch has never run the pipeline end to end on Actions.
-- The `VPS_HOST`, `VPS_USER` and `VPS_SSH_KEY` repository secrets still exist
-  and are now unused.
-- A `Spike - runner scrape` workflow still exists on the remote. It is not in
-  the tree on this branch.
-- GitHub Pages may still need enabling in repository settings (Source: GitHub
-  Actions).
+The arbitrage path is live but rarely fires. Two bookmakers seldom disagree
+enough to open a gap, so expect `0 arbitrage` on the page most of the time.
+`core.arbitrage` returns `stakes = None` whenever the book is not beatable,
+which is by design rather than a fault.
 
 ## Layout
 
@@ -69,8 +64,8 @@ Run anything else from inside the service directory, since each has its own
 venv. `make typecheck` loops because pyright needs each service's own venv to
 resolve its dependencies.
 
-Tests at last count: 112 across core (48), db_service (42),
-loro_scrape_service (14), swisslos_scrape_service (2) and report (6).
+Tests at last count: 113 across core (48), db_service (42),
+loro_scrape_service (14), swisslos_scrape_service (2) and report (7).
 
 ## Gotchas
 
@@ -105,6 +100,18 @@ relinks on the next scrape. Keep that bias.
 **Free tier limits.** Supabase pauses a project after 7 days of inactivity; the
 three-hourly cron is what keeps it awake. Storage is capped at 500 MB, and
 nothing currently prunes old `sportsbettingodds` rows.
+
+**The published page must stay scriptless.** A test rejects any `<script` or
+`src=` in the rendered output, so anything interactive has to be done in CSS.
+The light/dark toggle is a hidden checkbox that `:root:has(#theme:checked)`
+reacts to, which is why the theme choice does not survive a reload. Do not
+reach for JavaScript without deciding to drop that test first.
+
+**Ruff has no config file, on purpose.** Its defaults in 0.16 are a broad rule
+set, broader than the curated `select` the repo used to carry. That means the
+lint surface depends on the installed ruff version, and CI pulls the latest. If
+a future version adds rules and CI goes red on untouched code, pin ruff in CI
+rather than reintroducing a config.
 
 ## Conventions
 
