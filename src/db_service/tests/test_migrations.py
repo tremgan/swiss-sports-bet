@@ -23,7 +23,7 @@ KICKOFF = datetime(2026, 9, 12, 16, 0)
 def migrated_fixture(tmp_path, monkeypatch):
     """An Alembic config and engine pointed at a throwaway file database."""
     url = f"sqlite:///{tmp_path / 'migrations.db'}"
-    monkeypatch.setenv("SQLMODEL_DB_URL", url)
+    monkeypatch.setenv("DATABASE_URL", url)
     # `migrations/env.py` reads the URL from `config`, which conftest imported
     # long ago and bound to the repo-root .env's dev.db. Evicting the module is
     # what forces env.py to re-import it and see the URL set above.
@@ -234,7 +234,7 @@ def test_a_percent_encoded_password_survives_the_alembic_config(tmp_path, monkey
     from alembic.config import Config
 
     url = "postgresql+psycopg://postgres.ref:p%40ssw0rd@host.pooler.test:5432/postgres"
-    monkeypatch.setenv("SQLMODEL_DB_URL", url)
+    monkeypatch.setenv("DATABASE_URL", url)
     monkeypatch.delitem(sys.modules, "config", raising=False)
 
     config = Config()

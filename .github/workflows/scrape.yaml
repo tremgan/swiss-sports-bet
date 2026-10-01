@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SQLMODEL_DB_URL: ${{ secrets.SQLMODEL_DB_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DB_SERVICE_URL: http://127.0.0.1:8000
     steps:
       - uses: actions/checkout@v4

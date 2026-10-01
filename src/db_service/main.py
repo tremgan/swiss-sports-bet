@@ -34,7 +34,7 @@ app = FastAPI(
 
 def get_session() -> Iterator[Session]:
     if not engine:
-        raise RuntimeError("Database engine is not initialised; set SQLMODEL_DB_URL.")
+        raise RuntimeError("Database engine is not initialised; set DATABASE_URL.")
 
     with Session(engine) as session:
         yield session

@@ -11,12 +11,11 @@ logger = setup_logging("db_service")
 
 load_dotenv(override=False)  # reads .env from cwd by default
 
-SQLMODEL_DB_URL = os.getenv("SQLMODEL_DB_URL")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-if not SQLMODEL_DB_URL:
+if not DATABASE_URL:
     logger.warning(
-        "SQLMODEL_DB_URL is not set. Database operations will fail until it is "
-        "configured."
+        "DATABASE_URL is not set. Database operations will fail until it is configured."
     )
 
-engine = create_engine(SQLMODEL_DB_URL) if SQLMODEL_DB_URL else None
+engine = create_engine(DATABASE_URL) if DATABASE_URL else None

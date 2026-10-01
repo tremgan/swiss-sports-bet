@@ -175,7 +175,7 @@ cp .env.example .env
 
 | Variable | Used by | Purpose |
 |---|---|---|
-| `SQLMODEL_DB_URL` | db_service | Database connection string (`sqlite:///dev.db` locally, PostgreSQL in production) |
+| `DATABASE_URL` | db_service | Database connection string (`sqlite:///dev.db` locally, PostgreSQL in production) |
 | `DB_SERVICE_URL` | scrapers, dashboard | Where to reach the API (default `http://127.0.0.1:8000`) |
 | `SCRAPE_FREQUENCY_HOURS` | scrapers | Interval between runs (default `3`) |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | docker-compose | Postgres credentials |
@@ -187,7 +187,7 @@ cp .env.example .env
 ```bash
 cd src/db_service
 uv sync
-export SQLMODEL_DB_URL=sqlite:///dev.db
+export DATABASE_URL=sqlite:///dev.db
 uv run alembic upgrade head          # create/update the schema
 uv run uvicorn main:app --reload
 ```

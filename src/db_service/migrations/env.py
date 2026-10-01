@@ -1,6 +1,6 @@
 """Alembic environment.
 
-The database URL comes from `config.SQLMODEL_DB_URL` rather than alembic.ini so
+The database URL comes from `config.DATABASE_URL` rather than alembic.ini so
 that migrations and the running app can never point at different databases.
 """
 
@@ -12,7 +12,7 @@ from sqlmodel import SQLModel
 # Importing the models registers every table on SQLModel.metadata, which is what
 # autogenerate diffs the database against.
 import core.models  # noqa: F401
-from config import SQLMODEL_DB_URL
+from config import DATABASE_URL
 from sqlalchemy import engine_from_config, pool
 
 config = context.config
@@ -20,22 +20,22 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-if not SQLMODEL_DB_URL:
-    raise RuntimeError("SQLMODEL_DB_URL must be set to run migrations.")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL must be set to run migrations.")
 # set_main_option writes into a ConfigParser, where "%" opens an interpolation
 # token. A URL carrying a percent-encoded password — which is exactly what a
 # hosted Postgres tells you to use for a password with special characters —
 # otherwise raises "invalid interpolation syntax" before anything connects.
 # Reading the option back collapses "%%" to "%", so the engine sees the
 # original URL.
-config.set_main_option("sqlalchemy.url", SQLMODEL_DB_URL.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 target_metadata = SQLModel.metadata
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=SQLMODEL_DB_URL,
+        url=DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
