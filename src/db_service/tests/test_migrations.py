@@ -219,3 +219,27 @@ def test_downgrade_and_upgrade_round_trip(migrated):
     ] == [["match_datetime", "home_key", "away_key"]]
     with engine.connect() as conn:
         assert match_ids(conn) == [1]
+
+
+def test_a_percent_encoded_password_survives_the_alembic_config(tmp_path, monkeypatch):
+    """A hosted Postgres tells you to percent-encode a password's specials.
+
+    `env.py` passes the URL to ConfigParser, where a bare "%" opens an
+    interpolation token, so an encoded password used to raise before anything
+    connected. SQLite cannot carry a password, so the check is on the config
+    round trip rather than on a live connection.
+    """
+    import sys
+
+    from alembic.config import Config
+
+    url = "postgresql+psycopg://postgres.ref:p%40ssw0rd@host.pooler.test:5432/postgres"
+    monkeypatch.setenv("SQLMODEL_DB_URL", url)
+    monkeypatch.delitem(sys.modules, "config", raising=False)
+
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
+    # The same escaping env.py applies.
+    config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+
+    assert config.get_main_option("sqlalchemy.url") == url

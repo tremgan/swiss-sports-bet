@@ -22,7 +22,13 @@ if config.config_file_name is not None:
 
 if not SQLMODEL_DB_URL:
     raise RuntimeError("SQLMODEL_DB_URL must be set to run migrations.")
-config.set_main_option("sqlalchemy.url", SQLMODEL_DB_URL)
+# set_main_option writes into a ConfigParser, where "%" opens an interpolation
+# token. A URL carrying a percent-encoded password — which is exactly what a
+# hosted Postgres tells you to use for a password with special characters —
+# otherwise raises "invalid interpolation syntax" before anything connects.
+# Reading the option back collapses "%%" to "%", so the engine sees the
+# original URL.
+config.set_main_option("sqlalchemy.url", SQLMODEL_DB_URL.replace("%", "%%"))
 
 target_metadata = SQLModel.metadata
 

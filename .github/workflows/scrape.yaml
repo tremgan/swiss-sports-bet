@@ -1,0 +1,102 @@
+# Scrape both bookmakers on a schedule and publish the comparison to Pages.
+#
+# The whole pipeline is a batch job: scrape, write, render, publish. Nothing
+# here needs to outlive the run, so the db_service is started for the length of
+# the job and the dashboard is a file rather than a server.
+
+name: Scrape and publish
+
+on:
+  schedule:
+    # Every three hours, off the hour: scheduled workflows queue behind the
+    # stampede that lands exactly on :00 and can be delayed by many minutes.
+    - cron: '17 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Two overlapping runs would scrape and write the same fixtures twice. Queue
+# instead of cancelling, so a run already holding the database finishes.
+concurrency:
+  group: scrape-and-publish
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SQLMODEL_DB_URL: ${{ secrets.SQLMODEL_DB_URL }}
+      DB_SERVICE_URL: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install the database service
+        working-directory: src/db_service
+        run: uv sync
+
+      - name: Apply migrations
+        working-directory: src/db_service
+        run: uv run alembic upgrade head
+
+      - name: Start the database service
+        working-directory: src/db_service
+        run: |
+          uv run uvicorn main:app --port 8000 --log-level warning &
+          for _ in $(seq 1 30); do
+            curl -sf "$DB_SERVICE_URL/" >/dev/null && exit 0
+            sleep 1
+          done
+          echo "db_service did not become healthy" >&2
+          exit 1
+
+      # A bookmaker being unreachable is a bad run, not a failed pipeline: the
+      # other one still has prices worth storing, and the publish guard below
+      # is what decides whether the result is worth showing.
+      - name: Scrape Loro
+        continue-on-error: true
+        working-directory: src/loro_scrape_service
+        run: |
+          uv sync
+          uv run main.py --once
+
+      - name: Scrape Swisslos
+        continue-on-error: true
+        working-directory: src/swisslos_scrape_service
+        run: |
+          uv sync
+          uv run playwright install chromium --with-deps
+          uv run main.py --once
+
+      - name: Check there is something worth publishing
+        run: |
+          paired=$(curl -sf "$DB_SERVICE_URL/matches/with_odds/" \
+            | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
+          echo "$paired fixtures priced by more than one bookmaker"
+          # Publishing an empty page would replace a good one with nothing;
+          # leaving the previous page up is the better failure.
+          test "$paired" -gt 0
+
+      - name: Render the report
+        working-directory: src/report
+        run: |
+          uv sync
+          uv run main.py "$GITHUB_WORKSPACE/dist/index.html"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  publish:
+    needs: scrape
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
