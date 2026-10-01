@@ -57,7 +57,7 @@ scheduled job starts the API, scrapes into it, renders the page, and exits.
 
 **db_service** : FastAPI backend that stores all scraped data in a SQL database (SQLite locally, Supabase Postgres in production). Links each incoming bookmaker fixture to its canonical match as it is written, so there is no reconciliation step to run afterwards. Exposes endpoints for writing odds and reading paired cross-bookmaker odds.
 
-**report** : Renders the paired odds as one self-contained HTML file with inline CSS and no scripts, which is what GitHub Pages serves. It reads the same `GET /matches/with_odds/` payload and calls `core.arbitrage`, so the published page and the API agree on what counts as an opportunity.
+**report** : Renders the paired odds as a dense odds board in one self-contained HTML file, with inline CSS and no scripts, which is what GitHub Pages serves. It reads the same `GET /matches/with_odds/` payload and calls `core.arbitrage`, so the published page and the API agree on what counts as an opportunity.
 
 ## Data Model
 
@@ -115,6 +115,36 @@ A bookmaker's own book always overrounds: its implied probabilities sum to more 
 >>> result.best_odds["team2"]
 ('Swisslos', 5.0)
 ```
+
+## The Published Page
+
+One row per fixture, sorted by how tight the combined book is, so anything
+beatable sits at the top.
+
+| Column | Shows |
+|---|---|
+| Fixture | Canonical match label and the matchday |
+| Kick-off | Local Swiss time |
+| 1 / X / 2 | The best price for that outcome across both bookmakers |
+| Margin | Combined overround. Negative means arbitrage |
+
+Opening a row reveals every bookmaker's price with the winning one marked, the
+best price per outcome, and the stake split when the book is beatable.
+
+The layout follows a financial terminal rather than a card feed: a fixed
+numeric grid, tabular figures so digits line up column-wise, hairline rules,
+and uppercase micro-labels. Nineteen fixtures fit on one screen, which matters
+because comparing margins means reading them against each other.
+
+Colour carries exactly one meaning each. Green marks an arbitrage, an amber dot
+marks the bookmaker holding a best price, and everything else is greyscale.
+There is no light theme: the palette was designed dark, and a second one would
+be two palettes to maintain where only one was designed.
+
+The file is self-contained. All CSS is inline and there are no scripts and no
+external assets, because GitHub Pages serves it from a bare directory and a
+page that half-loads is worse than a plain one. A test asserts this by
+rejecting any `<script` or `src=` in the rendered output.
 
 ## Tech Stack
 
