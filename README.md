@@ -4,9 +4,7 @@
 
 A Python application that scrapes football (soccer) betting odds from Swiss bookmakers, links the same fixture across sources, and publishes a cross-bookmaker odds comparison with any arbitrage opportunities as a static page on GitHub Pages.
 
-It costs nothing to run. GitHub Actions does the scraping on a cron, Supabase holds the odds between runs, and GitHub Pages serves the page.
-
-**Live page: [tremgan.github.io/swiss-sports-bet](https://tremgan.github.io/swiss-sports-bet/)**, rebuilt every three hours.
+**[tremgan.github.io/swiss-sports-bet](https://tremgan.github.io/swiss-sports-bet/)**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/report-dark.png">
@@ -14,14 +12,13 @@ It costs nothing to run. GitHub Actions does the scraping on a cron, Supabase ho
   <img alt="The published odds comparison" src="docs/report-dark.png">
 </picture>
 
-## Project Status
-
-Everything works: the scrape, the storage, the cross-bookmaker linking, the arbitrage maths and the published page. A workflow drives all of it every three hours. Alembic manages the schema, and CI runs ruff, pyright and 113 tests on every push.
 
 ## Architecture
 
 Four services talk over HTTP, plus a shared library. Nothing outlives a run: the
 scheduled job starts the API, scrapes into it, renders the page, and exits.
+
+Scrapers are launched every 3 hours via a GitHub Actions workflow and post the data to 
 
 ```
                   GitHub Actions, every 3 hours
@@ -67,11 +64,11 @@ Swisslos ships its odds over a WebSocket as raw deflate, so this one drives a he
 
 #### db_service
 
-The FastAPI backend, writing to SQLite locally and Supabase Postgres in production. It links each incoming bookmaker fixture to its canonical match in the same transaction that stores it, which is why nothing has to be reconciled afterwards.
+FastAPI backend.
 
 #### report
 
-Renders the paired odds as one self-contained HTML file, inline CSS and no scripts, which is what GitHub Pages serves. It reads the same `GET /matches/with_odds/` payload and calls the same `core.arbitrage`, so the page and the API never disagree about what counts as an opportunity.
+Renders the paired odds as one self-contained HTML file, then gets deployed to Github Pages.
 
 ## Data Model
 
@@ -84,29 +81,23 @@ Renders the paired odds as one self-contained HTML file, inline CSS and no scrip
 <sub>Source: <a href="docs/erd.mmd"><code>docs/erd.mmd</code></a>, rendered with mermaid-cli.</sub>
 
 `Match` is the canonical fixture, identified by its normalised team pair at a
-kick-off rather than by any bookmaker's label. Each bookmaker contributes a
-`BookmakerMatch`, and every scrape appends a `SportsBettingOdds` row, so prices
-accumulate rather than overwrite.
+kick-off. Each bookmaker contributes a `BookmakerMatch`, and every scrape appends a `SportsBettingOdds` row.
 
 `match_id` is nullable on purpose. A `BookmakerMatch` the resolver cannot place
 without guessing stays unlinked and relinks on a later run.
 
 ## Cross-Bookmaker Matching
 
-Loro and Swisslos disagree about how much of a club's name to write down: Swisslos reports "FC Thun vs Grasshopper Club Zurich" where Loro reports "Thun vs Grasshopper". Rather than score string similarity and pick a threshold, linking is deterministic.
+Team names are not identical across bookmakers. Swisslos may report "FC Thun vs Grasshopper Club Zurich" where Loro reports "Thun vs Grasshopper". 
 
-Both feeds distinguish home from away (Loro tags the sides outright, Swisslos implies them by competitor order) and their kick-off times agree, so a fixture is identified by its normalised team pair at a kick-off:
-
+The matches are normalized as follows:
 1. Reduce each team name to the tokens that carry identity: lowercased, de-accented, stripped of club decoration (`FC`, `SC`, `Borussia`, founding years) and mapped through a small exonym table (`Cologne` to `Köln`, `Milano` to `Mailand`).
 2. Compare only fixtures kicking off at the same time.
 3. Two teams are the same when their squad qualifiers are equal (a women's or reserve side is never the senior side) and one's tokens contain the other's.
 4. Both home **and** away must match.
 
-`POST /bookmaker_matches/` resolves this inside the same transaction that stores the row, so a bookmaker match is never persisted in an unresolved state.
+ What makes the rule sound is that a club plays at most once at any given time.
 
-The kick-off scope is doing the real work here. Token containment is only safe inside one. Across a whole feed it merges clubs that have nothing to do with each other, "AC Mailand" into "Inter Mailand" and "AS Rom" into "Lazio Rom", because `{mailand} ⊆ {inter, mailand}` is structurally identical to `{grasshopper} ⊆ {grasshopper, zurich}`, and the second has to match. What makes the rule sound is that a club plays at most once at any given time. Across 136 kick-off blocks of live data there were no ambiguous pairs.
-
-When two canonical fixtures both look plausible, the row stays unlinked instead of being guessed at. A wrong link is permanent and corrupts the comparison without saying so, where an unlinked row is only absent. Repairing one means calling `BettingRepository.merge_matches` deliberately. Since the scrapers re-post every fixture on every run, a row refused once relinks itself on the next scrape.
 
 ## Arbitrage Detection
 
