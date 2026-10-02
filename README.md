@@ -74,8 +74,6 @@ Renders the paired odds as one self-contained HTML file, then gets deployed to G
 
 <img alt="Database schema" src="docs/schema.png">
 
-<sub>Exported from the Supabase schema visualiser; <a href="docs/schema.svg"><code>docs/schema.svg</code></a> is the vector original.</sub>
-
 `Match` is the canonical fixture, identified by its normalised team pair at a
 kick-off. Each bookmaker contributes a `BookmakerMatch`, and every scrape appends a `SportsBettingOdds` row.
 
@@ -160,15 +158,11 @@ Each service has its own `pyproject.toml` and `uv.lock`.
 
 ### Prerequisites
 
-- Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
 - Chromium (installed by Playwright for the Swisslos scraper)
 
 ### Environment Variables
 
-```bash
-cp .env.example .env
-```
 
 | Variable | Used by | Purpose |
 |---|---|---|
