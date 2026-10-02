@@ -18,7 +18,7 @@ A Python application that scrapes football (soccer) betting odds from Swiss book
 Four services talk over HTTP, plus a shared library. Nothing outlives a run: the
 scheduled job starts the API, scrapes into it, renders the page, and exits.
 
-Scrapers are launched every 3 hours via a GitHub Actions workflow and post the data to 
+Scrapers are launched every 3 hours via a GitHub Actions workflow and post the data to `db_service`, which writes it to Supabase.
 
 ```
                   GitHub Actions, every 3 hours
