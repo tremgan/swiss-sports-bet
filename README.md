@@ -1,7 +1,5 @@
 # 🇨🇭 Swiss Sports Bet Markets
 
-> **Disclaimer:** I built this to learn and to show the work, not to bet with. Do not use it for real-money betting or anything that breaches a bookmaker's terms of service.
-
 A Python application that scrapes football (soccer) betting odds from Swiss bookmakers, links the same fixture across sources, and publishes a cross-bookmaker odds comparison with any arbitrage opportunities as a static page on GitHub Pages.
 
 **[tremgan.github.io/swiss-sports-bet](https://tremgan.github.io/swiss-sports-bet/)**
