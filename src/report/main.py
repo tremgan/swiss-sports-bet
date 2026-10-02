@@ -156,7 +156,7 @@ def main(argv: list[str] | None = None) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(html, encoding="utf-8")
     logger.info(
-        f"wrote {output} — {len(fixtures)} fixtures, "
+        f"wrote {output}: {len(fixtures)} fixtures, "
         f"{sum(1 for f in fixtures if f['has_arbitrage'])} with arbitrage"
     )
 
