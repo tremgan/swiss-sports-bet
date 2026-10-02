@@ -75,8 +75,9 @@ at the repo root carried production, and `load_dotenv()` walks *up* from the
 working directory — so anything started anywhere inside the repo, a test run or
 a stray `uvicorn` included, silently got production credentials. One such server
 was still listening on a local port hours later and took a full scrape.
-`config.py` now pins the lookup to its own directory, and a local run with no
-`DATABASE_URL` gets no engine at all. Name the database you mean:
+`config.py` no longer reads a `.env` at all — `DATABASE_URL` comes from the
+real environment or not at all, and a local run without it gets no engine.
+Name the database you mean:
 `DATABASE_URL="sqlite:///dev.db" uv run uvicorn main:app`.
 
 **The Supabase connection string has three constraints at once.** Use the

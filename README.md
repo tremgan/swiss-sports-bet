@@ -72,13 +72,9 @@ Renders the paired odds as one self-contained HTML file, then gets deployed to G
 
 ## Data Model
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/erd-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="docs/erd-light.png">
-  <img alt="Entity relationship diagram" src="docs/erd-dark.png">
-</picture>
+<img alt="Database schema" src="docs/schema.png">
 
-<sub>Source: <a href="docs/erd.mmd"><code>docs/erd.mmd</code></a>, rendered with mermaid-cli.</sub>
+<sub>Exported from the Supabase schema visualiser; <a href="docs/schema.svg"><code>docs/schema.svg</code></a> is the vector original.</sub>
 
 `Match` is the canonical fixture, identified by its normalised team pair at a
 kick-off. Each bookmaker contributes a `BookmakerMatch`, and every scrape appends a `SportsBettingOdds` row.
@@ -130,8 +126,8 @@ swiss-sports-bet/
 |   |-- test.yaml                   # lint, type check, test (per service)
 |   +-- scrape.yaml                 # scheduled scrape, render and publish
 |-- docs/
-|   |-- erd.mmd                     # schema diagram source
-|   |-- erd-*.png                   # rendered, one per theme
+|   |-- schema.svg                  # schema diagram, exported from Supabase
+|   |-- schema.png                  # the same diagram, rendered for the README
 |   +-- report-*.png                # screenshot, one per theme
 +-- src/
     |-- core/
