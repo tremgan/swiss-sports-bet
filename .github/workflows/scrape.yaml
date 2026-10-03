@@ -10,7 +10,7 @@ on:
   schedule:
     # Every three hours, off the hour: scheduled workflows queue behind the
     # stampede that lands exactly on :00 and can be delayed by many minutes.
-    - cron: '17 */3 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
